@@ -1,0 +1,536 @@
+blueprint:
+  name: Advanced Sensor Light
+  description: >
+    # 💡 Advanced Sensor Light
+
+    **Version: 1.0**
+
+    Your lighting experience, your way - with intelligent manual override detection.
+    Takes the best of the regular Sensor Light blueprint with added intelligence for handling manual overrides.
+
+    **Features:**
+    - Detects when manual actions match or contradict what the automation would do
+    - Dynamic vacancy timeouts based on sensor latency
+    - Illuminance-based control with multiple thresholds
+    - Full motion/occupancy sensor support
+    - Manual override with timeout
+    - Extensive state handling
+
+    **Required helpers for each room:**
+    - input_boolean.[room]_automation_active
+    - input_boolean.[room]_manual_override  
+    - input_boolean.[room]_light_auto_on
+    - input_text.[room]_last_automation_action
+    - input_number.[room]_dark_threshold
+    - input_number.[room]_bright_threshold
+    - input_number.[room]_extremely_dark_threshold
+    - input_number.[room]_override_timeout_hours
+
+  domain: automation
+  input:
+    trigger:
+      name: "Trigger *"
+      description: "Binary sensors or schedules that trigger the automation."
+      default: []
+      selector:
+        entity:
+          filter:
+            domain:
+              - binary_sensor
+              - schedule
+          multiple: true
+    illuminance_sensor:
+      name: "Illuminance Sensor"
+      description: "Illuminance sensor to determine lighting conditions."
+      default: []
+      selector:
+        entity:
+          filter:
+            domain: sensor
+            device_class: illuminance
+    occupancy_off_latency:
+      name: "Occupancy Off Latency Sensor (optional)"
+      description: "A number entity that provides the latency time for occupancy detection, like EPO1's occupancy_off_latency."
+      default: []
+      selector:
+        entity:
+          filter:
+            domain: number
+    light_switch:
+      name: "Lights/Switches/Scenes/Scripts *"
+      description: "The entities to control."
+      default: []
+      selector:
+        target:
+          entity:
+            domain:
+              - light
+              - switch
+              - scene
+              - script
+    room_name:
+      name: "Room Name"
+      description: "Name of the room for logging and creating helper entity names."
+      default: "room"
+      selector:
+        text:
+    automation_active_helper:
+      name: "Automation Active Helper"
+      description: "Input boolean to track if automation is currently making changes."
+      selector:
+        entity:
+          domain: input_boolean
+    manual_override_helper:
+      name: "Manual Override Helper"
+      description: "Input boolean to track manual override state."
+      selector:
+        entity:
+          domain: input_boolean
+    light_auto_on_helper:
+      name: "Light Auto On Helper"
+      description: "Input boolean to track if light was turned on by automation."
+      selector:
+        entity:
+          domain: input_boolean
+    last_automation_action_helper:
+      name: "Last Automation Action Helper"
+      description: "Input text to store timestamp of last automation action."
+      selector:
+        entity:
+          domain: input_text
+    dark_threshold:
+      name: "Dark Threshold"
+      description: "Lux level below which to consider the room dark."
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 1000
+          unit_of_measurement: lux
+    bright_threshold:
+      name: "Bright Threshold"
+      description: "Lux level above which to consider the room bright."
+      default: 70
+      selector:
+        number:
+          min: 1
+          max: 1000
+          unit_of_measurement: lux
+    extremely_dark_threshold:
+      name: "Extremely Dark Threshold"
+      description: "Lux level below which to consider the room extremely dark."
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 1000
+          unit_of_measurement: lux
+    override_timeout_hours:
+      name: "Override Timeout (hours)"
+      description: "Time after which a manual override is cleared (0 to disable)."
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 24
+          step: 0.5
+          unit_of_measurement: hours
+    time_delay:
+      name: "Time Delay"
+      description: "Minimum time before turning lights off after no motion."
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 0.5
+          unit_of_measurement: minutes
+    include_logging:
+      name: "Include Detailed Logging"
+      description: "Enable detailed logging to system log (requires system_log component)."
+      default: false
+      selector:
+        boolean:
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  motion_trigger: !input trigger
+  room_name: !input room_name
+  light_switch: !input light_switch
+  automation_active_helper: !input automation_active_helper
+  manual_override_helper: !input manual_override_helper
+  light_auto_on_helper: !input light_auto_on_helper
+  last_automation_action_helper: !input last_automation_action_helper
+  illuminance_sensor: !input illuminance_sensor
+  dark_threshold: !input dark_threshold
+  bright_threshold: !input bright_threshold
+  extremely_dark_threshold: !input extremely_dark_threshold
+  override_timeout_hours: !input override_timeout_hours
+  time_delay_minutes: !input time_delay
+  include_logging: !input include_logging
+  occupancy_off_latency: !input occupancy_off_latency
+  
+  # Calculate sensor latency and vacancy timeout
+  sensor_off_latency_seconds: >-
+    {% if occupancy_off_latency %}
+      {{ states(occupancy_off_latency) | float(10) }}
+    {% else %}
+      10
+    {% endif %}
+  vacancy_timeout_minutes: >-
+    {% if occupancy_off_latency %}
+      {{ ([((sensor_off_latency_seconds * 5) / 60) | round(0, 'ceil'), 1] | max) | int(5) }}
+    {% else %}
+      {{ time_delay_minutes }}
+    {% endif %}
+  
+  # Light states
+  light_entities: >
+    {{ expand(light_switch.entity_id) | selectattr('domain', 'eq', 'light') | map(attribute='entity_id') | list }}
+  switch_entities: >
+    {{ expand(light_switch.entity_id) | selectattr('domain', 'eq', 'switch') | map(attribute='entity_id') | list }}
+  scene_entities: >-
+    {{ expand(light_switch.entity_id) | selectattr('domain', 'eq', 'scene') | map(attribute='entity_id') | list }}
+  script_entities: >-
+    {{ expand(light_switch.entity_id) | selectattr('domain', 'eq', 'script') | map(attribute='entity_id') | list }}
+  
+  # State variables
+  illuminance: >-
+    {% if illuminance_sensor %}
+      {{ states(illuminance_sensor)|float(0) }}
+    {% else %}
+      100
+    {% endif %}
+  is_dark: "{{ illuminance < dark_threshold }}"
+  is_bright: "{{ illuminance > bright_threshold }}"
+  is_extremely_dark: "{{ illuminance < extremely_dark_threshold }}"
+  in_middle_range: "{{ not is_dark and not is_bright }}"
+  someone_present: "{{ is_state(motion_trigger, 'on') }}"
+  sun_state: "{{ states('sun.sun') }}"
+  is_daytime: "{{ sun_state == 'above_horizon' }}"
+  is_nighttime: "{{ sun_state == 'below_horizon' }}"
+  
+  # Determine if any lights are on
+  lights_on: >-
+    {% set lights_on = false %}
+    {% for entity in light_entities + switch_entities %}
+      {% if is_state(entity, 'on') %}
+        {% set lights_on = true %}
+      {% endif %}
+    {% endfor %}
+    {{ lights_on }}
+  
+  # User action detection
+  user_toggled_lights: "{{ trigger.platform == 'state' and trigger.entity_id in light_entities + switch_entities }}"
+  user_turned_on: "{{ user_toggled_lights and trigger.to_state.state == 'on' }}"
+  user_turned_off: "{{ user_toggled_lights and trigger.to_state.state == 'off' }}"
+  
+  # Automation state tracking
+  manual_override: "{{ is_state(manual_override_helper, 'on') }}"
+  automation_inactive: "{{ is_state(automation_active_helper, 'off') }}"
+  light_recently_changed: "{{ trigger.platform == 'state' and trigger.entity_id in light_entities + switch_entities and (now() - trigger.to_state.last_changed).total_seconds() < 10 }}"
+  
+  # Last automation action tracking
+  time_since_last_automation: >-
+    {% if states(last_automation_action_helper) != 'unknown' and states(last_automation_action_helper) != '' %}
+      {% set timestamp = states(last_automation_action_helper).split('+')[0] %}
+      {{ (now().replace(tzinfo=None) - strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() }}
+    {% else %}
+      9999
+    {% endif %}
+  
+  automation_initiated_change: >-
+    {% if states(last_automation_action_helper) != 'unknown' and states(last_automation_action_helper) != '' %}
+      {% set timestamp = states(last_automation_action_helper).split('+')[0] %}
+      {% set time_diff = (now().replace(tzinfo=None) - strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() %}
+      {{ time_diff < 3.0 and time_diff > 0 }}
+    {% else %}
+      false
+    {% endif %}
+  
+  # Override timeout tracking
+  hourly_check: "{{ trigger.platform == 'time_pattern' }}"
+  override_timeout: >-
+    {{ is_state(manual_override_helper, 'on') and override_timeout_hours > 0 and
+       (now() - states[manual_override_helper].last_changed).total_seconds() > (override_timeout_hours * 3600) }}
+  
+  # Vacancy timeout
+  vacant_for_timeout: >-
+    {{ not someone_present and 
+       (now() - states[motion_trigger[0]].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) }}
+  
+  # Advanced automation intent detection
+  auto_would_turn_on_intent: "{{ (is_dark or is_extremely_dark) and someone_present }}"
+  auto_would_turn_off_intent: "{{ not someone_present }}"
+  auto_would_preserve_state_intent: >-
+    {{ (in_middle_range and someone_present) or (is_bright and someone_present) }}
+
+trigger:
+  - platform: state
+    entity_id: !input trigger
+  - platform: state
+    entity_id: !input light_switch
+  - platform: state
+    entity_id: !input illuminance_sensor
+  - platform: state
+    entity_id: !input occupancy_off_latency
+  - platform: state
+    entity_id: sun.sun
+  - platform: time_pattern
+    hours: "/1"
+
+action:
+  # Logging
+  - choose:
+    - conditions:
+        - "{{ include_logging }}"
+      sequence:
+        - service: system_log.write
+          data:
+            level: info
+            message: >-
+              ==================== {{ room_name | upper }} AUTOMATION TRIGGERED ====================
+        - service: system_log.write
+          data:
+            level: info
+            message: >-
+              {{ room_name | upper }} INITIAL STATE: trigger={{ trigger.entity_id }}, 
+              illuminance={{ illuminance }}, is_dark={{ is_dark }}, 
+              is_extremely_dark={{ is_extremely_dark }}, someone_present={{ someone_present }},
+              lights_on={{ lights_on }}, manual_override={{ manual_override }},
+              vacancy_timeout_minutes={{ vacancy_timeout_minutes }}
+  
+  # Handle manual override when user toggles lights
+  - choose:
+    - conditions:
+        - "{{ user_toggled_lights and not automation_initiated_change }}"
+      sequence:
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} MANUAL ACTION: user_turned_on={{ user_turned_on }}, 
+                    user_turned_off={{ user_turned_off }}, auto_would_turn_on={{ auto_would_turn_on_intent }},
+                    auto_would_turn_off={{ auto_would_turn_off_intent }}
+        
+        # First check if user action matches what automation would do
+        - choose:
+          - conditions:
+              - "{{ (user_turned_on and auto_would_turn_on_intent) or 
+                     (user_turned_off and auto_would_turn_off_intent) }}"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ manual_override_helper }}"
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ light_auto_on_helper }}"
+              - choose:
+                - conditions:
+                    - "{{ include_logging }}"
+                  sequence:
+                    - service: system_log.write
+                      data:
+                        level: info
+                        message: "{{ room_name | upper }} MANUAL OVERRIDE: Cleared, user action matches automation intent."
+          
+          # Check if user action contradicts what automation would do
+          - conditions:
+              - "{{ (user_turned_on and auto_would_turn_off_intent) or
+                     (user_turned_off and auto_would_turn_on_intent) or
+                     (user_turned_on and auto_would_preserve_state_intent) or
+                     (user_turned_off and auto_would_preserve_state_intent) }}"
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: "{{ manual_override_helper }}"
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ light_auto_on_helper }}"
+              - choose:
+                - conditions:
+                    - "{{ include_logging }}"
+                  sequence:
+                    - service: system_log.write
+                      data:
+                        level: info
+                        message: "{{ room_name | upper }} MANUAL OVERRIDE: Enabled, user action contradicts automation intent."
+          
+          # Default handling for other cases
+          default:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: "{{ light_auto_on_helper }}"
+            - choose:
+              - conditions:
+                  - "{{ include_logging }}"
+                sequence:
+                  - service: system_log.write
+                    data:
+                      level: info
+                      message: "{{ room_name | upper }} MANUAL ACTION: No override determination made."
+  
+  # Check for override timeout conditions
+  - choose:
+    - conditions:
+        - "{{ override_timeout and override_timeout_hours > 0 }}"
+      sequence:
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ manual_override_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} OVERRIDE: Cleared after timeout ({{ override_timeout_hours }} hours)."
+        - service: automation.trigger
+          target:
+            entity_id: "{{this.entity_id}}"
+          data:
+            skip_condition: true
+  
+  # Check for vacancy timeout to clear override
+  - choose:
+    - conditions:
+        - "{{ vacant_for_timeout }}"
+        - "{{ manual_override }}"
+      sequence:
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ manual_override_helper }}"
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} OVERRIDE: Cleared after vacancy ({{ vacancy_timeout_minutes }}m).
+        - service: automation.trigger
+          target:
+            entity_id: "{{this.entity_id}}"
+          data:
+            skip_condition: true
+  
+  # Skip if manual override is active
+  - choose:
+    - conditions:
+        - "{{ manual_override }}"
+        - "{{ not user_toggled_lights or automation_initiated_change }}"
+        - "{{ not override_timeout }}"
+        - "{{ not vacant_for_timeout }}"
+      sequence:
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} MANUAL OVERRIDE: Skipping auto actions."
+        - stop: "Manual override is active"
+  
+  # Main automation logic
+  # Auto-ON when dark and occupied
+  - choose:
+    - conditions:
+        - "{{ (is_dark or is_extremely_dark) }}"
+        - "{{ someone_present }}"
+        - "{{ not lights_on }}"
+        - "{{ not manual_override }}"
+        - "{{ not light_recently_changed }}"
+      sequence:
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        - service: homeassistant.turn_on
+          target:
+            entity_id: "{{ light_switch.entity_id }}"
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} AUTO: Turned ON - Dark & Occupied."
+  
+  # Auto-OFF when vacant
+  - choose:
+    - conditions:
+        - "{{ not someone_present }}"
+        - "{{ lights_on }}"
+        - "{{ not manual_override }}"
+      sequence:
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        - service: homeassistant.turn_off
+          target:
+            entity_id: "{{ light_switch.entity_id }}"
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} AUTO: Turned OFF - Vacant."
+  
+  # Final logging
+  - choose:
+    - conditions:
+        - "{{ include_logging }}"
+      sequence:
+        - service: system_log.write
+          data:
+            level: info
+            message: >-
+              {{ room_name | upper }} FINAL STATE: manual_override={{ is_state(manual_override_helper, 'on') }},
+              automation_active={{ is_state(automation_active_helper, 'on') }},
+              light_auto_on={{ is_state(light_auto_on_helper, 'on') }}, 
+              lights_state={{ lights_on }}
+        - service: system_log.write
+          data:
+            level: info
+            message: >-
+              ==================== {{ room_name | upper }} AUTOMATION COMPLETE ====================
