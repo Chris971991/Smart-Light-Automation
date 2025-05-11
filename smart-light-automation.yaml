@@ -5,57 +5,80 @@ blueprint:
     adjustments. Designed for use with EPO (Everything Presence One) sensors or
     similar devices providing occupancy detection and illuminance sensing.
     
-    This automation will:
-    - Turn lights on automatically when dark and someone is present
-    - Turn lights off when room is vacant for a configurable time
-    - Respect manual overrides when you control lights
-    - Intelligently clear overrides when you manually turn off lights in bright rooms
-    - Maintain overrides when you manually override the automation's behavior
-    - Clear overrides after configurable timeout or room vacancy
+    ### Features:
+    • Turn lights on automatically when dark and someone is present
+    • Turn lights off when room is vacant for a configurable time
+    • Respect manual overrides when you control lights
+    • Intelligently clear overrides when you manually turn off lights in bright rooms
+    • Maintain overrides when you manually override the automation's behavior
+    • Clear overrides after configurable timeout or room vacancy
     
-    IMPORTANT: Before using this blueprint, you MUST create the following helper entities:
-    1. input_boolean.[room_name]_automation_active - Tracks when automation is active
-    2. input_boolean.[room_name]_manual_override - Tracks manual override state
-    3. input_boolean.[room_name]_light_auto_on - Tracks if light was auto-turned on
-    4. input_text.[room_name]_last_automation_action - Stores last action timestamp
-    Replace [room_name] with your actual room name (e.g., office, bedroom, etc.)
+    ### REQUIRED SETUP:
+    Before using this blueprint, you MUST create these helper entities:
+    
+    1. `input_boolean.[room_name]_automation_active`
+       Tracks when automation is running an action
+    
+    2. `input_boolean.[room_name]_manual_override`
+       Tracks when user has manually overridden automation
+    
+    3. `input_boolean.[room_name]_light_auto_on`
+       Tracks if light was automatically turned on
+    
+    4. `input_text.[room_name]_last_automation_action`
+       Stores timestamp of last automation action
+    
+    Replace [room_name] with your actual room name (office, bedroom, etc.)
 
   domain: automation
   input:
     room_name:
       name: Room Name
-      description: Name of the room (used in logs and for entity identification)
+      description: >
+        Name of the room used throughout the automation for entity naming and logging.
+        This should be a simple name like 'office', 'bedroom', etc. without spaces.
       selector:
         text:
     presence_pir_sensor:
       name: PIR Motion Sensor
-      description: PIR motion sensor entity
+      description: >
+        PIR (Passive Infrared) motion sensor entity that detects immediate movement.
+        For EPO sensors, this is typically binary_sensor.everything_presence_one_ROOM_pir.
       selector:
         entity:
           domain: binary_sensor
     presence_mmwave_sensor:
       name: mmWave Occupancy Sensor
-      description: mmWave or radar-based occupancy sensor
+      description: >
+        Millimeter-wave radar occupancy sensor that can detect presence even without movement.
+        For EPO sensors, this is typically binary_sensor.everything_presence_one_ROOM_occupancy.
       selector:
         entity:
           domain: binary_sensor
     illuminance_sensor:
       name: Illuminance Sensor
-      description: Sensor that measures room brightness in lux
+      description: >
+        Sensor that measures room brightness in lux (lumens per square meter).
+        For EPO sensors, this is typically sensor.everything_presence_one_ROOM_illuminance.
+        This reading is used with thresholds to determine when to turn lights on/off.
       selector:
         entity:
           domain: sensor
     light_switch:
       name: Light Switch/Entity
-      description: The light switch or entity to control
+      description: >
+        The light switch or light entity that this automation will control.
+        Works with both switch.* entities (simple on/off) and light.* entities (supports brightness).
       selector:
         entity:
           domain: [switch, light]
     automation_active_helper:
       name: Automation Active Helper
       description: >
-        Helper to track automation active state. You must manually create this
-        input_boolean entity before using this blueprint.
+        Helper entity that tracks when the automation is actively performing an action.
+        This prevents the automation from interfering with itself and helps distinguish
+        between user actions and automation actions. You MUST create this input_boolean
+        entity before using this blueprint.
       default: input_boolean.{{ input.room_name }}_automation_active
       selector:
         entity:
@@ -63,7 +86,9 @@ blueprint:
     manual_override_helper:
       name: Manual Override Helper
       description: >
-        Helper to track manual override state. You must manually create this
+        Helper entity that tracks when a user has manually overridden the automation.
+        When active, the automation will not automatically control lights until the
+        override is cleared by vacancy timeout or hourly check. You MUST create this
         input_boolean entity before using this blueprint.
       default: input_boolean.{{ input.room_name }}_manual_override
       selector:
@@ -72,8 +97,9 @@ blueprint:
     light_auto_on_helper:
       name: Light Auto On Helper
       description: >
-        Helper to track if light was automatically turned on. You must manually
-        create this input_boolean entity before using this blueprint.
+        Helper entity that tracks whether the light was turned on automatically.
+        This is used to make better decisions about when to turn lights off.
+        You MUST create this input_boolean entity before using this blueprint.
       default: input_boolean.{{ input.room_name }}_light_auto_on
       selector:
         entity:
@@ -81,15 +107,19 @@ blueprint:
     last_automation_action_helper:
       name: Last Automation Action Helper
       description: >
-        Helper to track last automation action time. You must manually create
-        this input_text entity before using this blueprint.
+        Helper entity that stores the timestamp of the last automation action.
+        This is used to prevent the automation from reacting to its own actions.
+        You MUST create this input_text entity before using this blueprint.
       default: input_text.{{ input.room_name }}_last_automation_action
       selector:
         entity:
           domain: input_text
     dark_threshold:
       name: Dark Threshold
-      description: Lux threshold below which the room is considered dark
+      description: >
+        Lux threshold below which the room is considered dark enough to need lights.
+        When illuminance falls below this value AND someone is present, lights will
+        turn on automatically. Typically 5-15 lux for most rooms.
       default: 5
       selector:
         number:
@@ -100,7 +130,11 @@ blueprint:
           step: 1
     bright_threshold:
       name: Bright Threshold
-      description: Lux threshold above which the room is considered bright
+      description: >
+        Lux threshold above which the room is considered bright (has enough natural light).
+        This threshold is important for the "clear override when turning off lights in bright room"
+        feature. When you manually turn off lights in a bright room, the override is cleared.
+        Usually 70-100 lux is appropriate for most rooms.
       default: 70
       selector:
         number:
@@ -111,7 +145,10 @@ blueprint:
           step: 5
     extremely_dark_threshold:
       name: Extremely Dark Threshold
-      description: Lux threshold below which the room is considered extremely dark
+      description: >
+        Lux threshold below which the room is considered extremely dark (pitch black).
+        This allows for more aggressive light control in very dark conditions.
+        Usually 1-3 lux for complete darkness.
       default: 2
       selector:
         number:
@@ -123,8 +160,10 @@ blueprint:
     sensor_off_latency_input:
       name: Sensor Off Latency Entity (Optional)
       description: >
-        EPO sensor's off latency entity (leave blank to use fixed value).
-        For EPO sensors, this is typically number.everything_presence_one_ROOM_occupancy_off_latency
+        Entity that provides the sensor's off latency value in seconds.
+        For EPO sensors, this is typically number.everything_presence_one_ROOM_occupancy_off_latency.
+        This entity provides a dynamic value that can be changed from the EPO app.
+        Leave blank to use the fixed latency value below instead.
       default: number.everything_presence_one_{{ input.room_name }}_occupancy_off_latency
       selector:
         entity:
@@ -133,7 +172,10 @@ blueprint:
     fixed_latency_seconds:
       name: Fixed Off Latency (seconds)
       description: >
-        Fixed off latency value in seconds, used if sensor_off_latency_input is not available
+        Fixed off latency value in seconds, used if sensor_off_latency_input is not available.
+        This is how long the sensor waits after the last detected motion before reporting "no presence".
+        A higher value means the sensor is less responsive but reduces false negatives.
+        Typically 30-120 seconds is appropriate, with 60 being a good default.
       default: 60
       selector:
         number:
@@ -145,8 +187,11 @@ blueprint:
     vacancy_timeout_multiplier:
       name: Vacancy Timeout Multiplier
       description: >
-        Multiplier for sensor off latency to determine vacancy timeout.
-        Total vacancy timeout = sensor_off_latency × multiplier (in minutes)
+        Multiplier applied to the sensor off latency to determine when a room is considered truly vacant.
+        The calculation is: vacancy_timeout_minutes = sensor_off_latency_seconds × multiplier ÷ 60.
+        For example, with a 60s off latency and 5× multiplier, the room must be vacant for 5 minutes
+        before lights turn off automatically or manual overrides are cleared. Higher values prevent
+        false offs but delay automatic actions.
       default: 5
       selector:
         number:
@@ -156,7 +201,11 @@ blueprint:
           step: 1
     override_timeout_hours:
       name: Override Timeout Hours
-      description: Number of hours after which the manual override will be automatically cleared
+      description: >
+        Maximum number of hours a manual override will remain active before being automatically cleared.
+        This ensures that forgotten manual overrides don't permanently disable automation.
+        After this time period, automation will resume normal operation even if manual override was set.
+        Typical values are 2-4 hours for most rooms.
       default: 2
       selector:
         number:
@@ -167,7 +216,11 @@ blueprint:
           step: 0.5
     enable_debug_logs:
       name: Enable Debug Logs
-      description: Enable detailed debug logging
+      description: >
+        Enable detailed debug logging in Home Assistant. These logs can help understand
+        the automation's decision process, troubleshoot issues, and fine-tune settings.
+        You can view logs in Configuration → Logs, filtered for your room name.
+        Recommended to enable during initial setup and disable once everything works.
       default: false
       selector:
         boolean:
