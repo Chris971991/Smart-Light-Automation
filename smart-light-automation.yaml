@@ -1,20 +1,22 @@
 blueprint:
-  name: Advanced Sensor Light
+  name: Advanced Sensor Light with Smart Override
   description: >
-    # 💡 Advanced Sensor Light
+    # 💡 Advanced Sensor Light with Smart Override
 
     **Version: 1.0**
 
-    Your lighting experience, your way - with intelligent manual override detection.
-    Takes the best of the regular Sensor Light blueprint with added intelligence for handling manual overrides.
+    Complete lighting automation with intelligent manual override detection. Combines all features from the original Sensor Light blueprint with advanced manual override handling.
 
     **Features:**
-    - Detects when manual actions match or contradict what the automation would do
+    - Smart manual override detection (understands user intent vs automation intent)
     - Dynamic vacancy timeouts based on sensor latency
-    - Illuminance-based control with multiple thresholds
-    - Full motion/occupancy sensor support
-    - Manual override with timeout
-    - Extensive state handling
+    - Full illuminance and motion control
+    - Comprehensive dynamic lighting with lux and sun-based brightness/color
+    - Night lights mode with configurable conditions
+    - Time & schedule based options
+    - Device presence detection
+    - Night glow with low-level ambient lighting
+    - Detailed logging system
 
     **Required helpers for each room:**
     - input_boolean.[room]_automation_active
@@ -25,12 +27,13 @@ blueprint:
     - input_number.[room]_bright_threshold
     - input_number.[room]_extremely_dark_threshold
     - input_number.[room]_override_timeout_hours
-
   domain: automation
   input:
+    # TRIGGER SETTINGS
     trigger:
       name: "Trigger *"
-      description: "Binary sensors or schedules that trigger the automation."
+      icon: mdi:cog-outline
+      description: "Binary sensors or schedules to trigger the automation."
       default: []
       selector:
         entity:
@@ -39,26 +42,12 @@ blueprint:
               - binary_sensor
               - schedule
           multiple: true
-    illuminance_sensor:
-      name: "Illuminance Sensor"
-      description: "Illuminance sensor to determine lighting conditions."
-      default: []
-      selector:
-        entity:
-          filter:
-            domain: sensor
-            device_class: illuminance
-    occupancy_off_latency:
-      name: "Occupancy Off Latency Sensor (optional)"
-      description: "A number entity that provides the latency time for occupancy detection, like EPO1's occupancy_off_latency."
-      default: []
-      selector:
-        entity:
-          filter:
-            domain: number
-    light_switch:
-      name: "Lights/Switches/Scenes/Scripts *"
-      description: "The entities to control."
+
+    # LIGHTS SETTINGS
+    lights_settings:
+      name: "Lights *"
+      icon: mdi:lightbulb-outline
+      description: "The lights, switches, scenes, and scripts to control."
       default: []
       selector:
         target:
@@ -68,76 +57,32 @@ blueprint:
               - switch
               - scene
               - script
-    room_name:
-      name: "Room Name"
-      description: "Name of the room for logging and creating helper entity names."
-      default: "room"
-      selector:
-        text:
-    automation_active_helper:
-      name: "Automation Active Helper"
-      description: "Input boolean to track if automation is currently making changes."
+
+    boolean_scenes_scripts:
+      name: "Scenes & Scripts - Toggle Helper"
+      description: "Toggle helper for scenes/scripts functionality."
+      default: []
       selector:
         entity:
-          domain: input_boolean
-    manual_override_helper:
-      name: "Manual Override Helper"
-      description: "Input boolean to track manual override state."
+          filter:
+            domain:
+              - input_boolean
+
+    end_scenes:
+      name: "Scenes - Scripts To Turn OFF"
+      description: "Scenes/scripts to turn OFF after time delay."
+      default: []
       selector:
         entity:
-          domain: input_boolean
-    light_auto_on_helper:
-      name: "Light Auto On Helper"
-      description: "Input boolean to track if light was turned on by automation."
-      selector:
-        entity:
-          domain: input_boolean
-    last_automation_action_helper:
-      name: "Last Automation Action Helper"
-      description: "Input text to store timestamp of last automation action."
-      selector:
-        entity:
-          domain: input_text
-    dark_threshold:
-      name: "Dark Threshold"
-      description: "Lux level below which to consider the room dark."
-      default: 15
-      selector:
-        number:
-          min: 1
-          max: 1000
-          unit_of_measurement: lux
-    bright_threshold:
-      name: "Bright Threshold"
-      description: "Lux level above which to consider the room bright."
-      default: 70
-      selector:
-        number:
-          min: 1
-          max: 1000
-          unit_of_measurement: lux
-    extremely_dark_threshold:
-      name: "Extremely Dark Threshold"
-      description: "Lux level below which to consider the room extremely dark."
-      default: 5
-      selector:
-        number:
-          min: 1
-          max: 1000
-          unit_of_measurement: lux
-    override_timeout_hours:
-      name: "Override Timeout (hours)"
-      description: "Time after which a manual override is cleared (0 to disable)."
-      default: 2
-      selector:
-        number:
-          min: 0
-          max: 24
-          step: 0.5
-          unit_of_measurement: hours
+          multiple: true
+          filter:
+            domain:
+              - scene
+              - script
+
     time_delay:
-      name: "Time Delay"
-      description: "Minimum time before turning lights off after no motion."
+      name: "Base Time Delay"
+      description: "Minutes before turning OFF after all triggers clear."
       default: 5
       selector:
         number:
@@ -145,32 +90,1160 @@ blueprint:
           max: 30
           step: 0.5
           unit_of_measurement: minutes
-    include_logging:
-      name: "Include Detailed Logging"
-      description: "Enable detailed logging to system log (requires system_log component)."
-      default: false
-      selector:
-        boolean:
+
+    # LIGHT CONTROL SETTINGS
+    normal_lights_settings:
+      name: "Light Control"
+      icon: mdi:lightbulb-on-outline
+      collapsed: true
+      input:
+        include_light_control:
+          name: "Light Control Options (Optional)"
+          description: "Select options for brightness or transition."
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Use Brightness
+                  value: "use_brightness"
+                - label: Use Transition
+                  value: "use_transition"
+        light_brightness:
+          name: "Brightness"
+          description: "Brightness level when lights turn ON."
+          default: 100
+          selector:
+            number:
+              min: 1
+              max: 100
+              mode: slider
+              step: 1
+              unit_of_measurement: '%'
+        light_transition_on:
+          name: "Transition - ON"
+          description: "Transition time when turning ON."
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 5
+              mode: slider
+              step: 0.5
+              unit_of_measurement: seconds
+        light_transition_off:
+          name: "Transition - OFF"
+          description: "Transition time when turning OFF."
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 30
+              mode: slider
+              step: 1
+              unit_of_measurement: seconds
+        include_light_colour_control:
+          name: "Light Color Control Options"
+          description: "Options for color temperature or RGB."
+          default: disable_colour_control
+          selector:
+            select:
+              options:
+                - label: Use Color Temperature
+                  value: "use_colour_temperature"
+                - label: Use RGB Color
+                  value: "use_rgb_colour"
+                - label: Use RGBW Color
+                  value: "use_rgbw_colour"
+                - label: Use RGBWW Color
+                  value: "use_rgbww_colour"
+                - label: Disable Color Control
+                  value: "disable_colour_control"
+        light_colour_temperature:
+          name: "Color Temperature"
+          description: "Color temperature for lights."
+          default: 5000
+          selector:
+            number:
+              min: 2000
+              max: 8000
+              mode: slider
+              step: 100
+              unit_of_measurement: 'kelvin'
+        light_rgb_colour:
+          name: "RGB Color"
+          description: "RGB color for lights."
+          default: [255, 255, 255]
+          selector:
+            color_rgb:
+        light_rgbw_colour:
+          name: "RGBW Color"
+          description: "RGBW color values for lights."
+          default: [255, 255, 255, 255]
+          selector:
+            object:
+        light_rgbww_colour:
+          name: "RGBWW Color"
+          description: "RGBWW color values for lights."
+          default: [255, 255, 255, 255, 255]
+          selector:
+            object:
+
+    # DYNAMIC LIGHTING SETTINGS
+    dynamic_lighting_settings:
+      name: "Dynamic Lighting"
+      icon: mdi:creation-outline
+      collapsed: true
+      input:
+        include_dynamic_lighting:
+          name: "Use Dynamic Lighting Options"
+          description: "Adaptive brightness/color based on lux or sun."
+          default: disable_dynamic_lighting
+          selector:
+            select:
+              mode: dropdown
+              options:
+                - label: Disable Dynamic Lighting
+                  value: "disable_dynamic_lighting"
+                - label: 1 - Lux Controlled Brightness
+                  value: "enable_lux_controled_brightness"
+                - label: 2 - Lux Controlled Brightness Inverted
+                  value: "enable_lux_controled_brightness_inv"
+                - label: 3 - Sun Elevation Lighting - Color Temp
+                  value: "enable_sun_elevation_colour"
+                - label: 4 - Sun Elevation Lighting - Brightness
+                  value: "enable_sun_elevation_brightness"
+                - label: 5 - Sun Elevation Lighting - Brightness Inverted
+                  value: "enable_sun_elevation_brightness_inv"
+                - label: 6 - Sun Elevation Lighting - Color Temp + Brightness
+                  value: "enable_sun_elevation_colour_brightness"
+                - label: 7 - Sun Elevation Lighting - Color Temp + Brightness Inverted
+                  value: "enable_sun_elevation_colour_brightness_inv"
+                - label: 8 - Sun Elevation Lighting - Color Temp + Lux Controlled Brightness
+                  value: "enable_sun_elevation_colour_lux_brightness"
+                - label: 9 - Sun Elevation Lighting - Color Temp + Lux Controlled Brightness Inverted
+                  value: "enable_sun_elevation_colour_lux_brightness_inv"
+                - label: 10 - Time Controlled - Color Temp
+                  value: "enable_time_controled_colour"
+                - label: 11 - Time Controlled - Brightness
+                  value: "enable_time_controled_brightness"
+                - label: 12 - Time Controlled - Brightness Inverted
+                  value: "enable_time_controled_brightness_inv"
+                - label: 13 - Time Controlled - Color Temp + Brightness
+                  value: "enable_time_controled_colour_brightness"
+        dynamic_lighting_lux_sensor:
+          name: "Dynamic Lighting - Ambient Light Sensor"
+          description: "Ambient light sensor for lux-based options."
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                device_class: illuminance
+        dynamic_lighting_max_lux:
+          name: "Dynamic Lighting - Max Lux Value"
+          description: "Maximum lux threshold."
+          default: 400
+          selector:
+            number:
+              min: 10
+              max: 900
+              step: 10
+              unit_of_measurement: lux
+        dynamic_lighting_min_lux:
+          name: "Dynamic Lighting - Min Lux Value"
+          description: "Minimum lux threshold."
+          default: 40
+          selector:
+            number:
+              min: 0
+              max: 600
+              step: 10
+              unit_of_measurement: lux
+        dynamic_lighting_max_brightness:
+          name: "Dynamic Lighting - Max Brightness Value"
+          description: "Maximum brightness level."
+          default: 100
+          selector:
+            number:
+              min: 10
+              max: 100
+              step: 1
+              unit_of_measurement: '%'
+        dynamic_lighting_min_brightness:
+          name: "Dynamic Lighting - Min Brightness Value"
+          description: "Minimum brightness level."
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 1
+              unit_of_measurement: '%'
+        dynamic_lighting_boolean:
+          name: "Dynamic Lighting - Toggle Helper"
+          description: "Helper entity for dynamic lighting control."
+          default: []
+          selector:
+            entity:
+              filter:
+                domain:
+                  - input_boolean
+        dynamic_lighting_max_colour_temp:
+          name: "Dynamic Lighting - Max Color Temperature"
+          description: "Maximum color temperature."
+          default: 5000
+          selector:
+            number:
+              min: 2500
+              max: 8000
+              mode: slider
+              step: 100
+              unit_of_measurement: 'kelvin'
+        dynamic_lighting_min_colour_temp:
+          name: "Dynamic Lighting - Min Color Temperature"
+          description: "Minimum color temperature."
+          default: 3000
+          selector:
+            number:
+              min: 2000
+              max: 7500
+              mode: slider
+              step: 100
+              unit_of_measurement: 'kelvin'
+        dynamic_lighting_sun_elevation_start_rising:
+          name: "Dynamic Lighting - Sun Elevation Rising - Start Point"
+          description: "Sun elevation rising start point."
+          default: -1.5
+          selector:
+            number:
+              min: -10
+              max: 30
+              step: 0.5
+              unit_of_measurement: degrees
+        dynamic_lighting_sun_elevation_end_rising:
+          name: "Dynamic Lighting - Sun Elevation Rising - End Point"
+          description: "Sun elevation rising end point."
+          default: 15
+          selector:
+            number:
+              min: 0
+              max: 90
+              step: 0.5
+              unit_of_measurement: degrees
+        dynamic_lighting_sun_elevation_start_falling:
+          name: "Dynamic Lighting - Sun Elevation Descending - Start Point"
+          description: "Sun elevation falling start point."
+          default: 15
+          selector:
+            number:
+              min: 0
+              max: 90
+              step: 0.5
+              unit_of_measurement: degrees
+        dynamic_lighting_sun_elevation_end_falling:
+          name: "Dynamic Lighting - Sun Elevation Descending - End Point"
+          description: "Sun elevation falling end point."
+          default: -4.0
+          selector:
+            number:
+              min: -10
+              max: 30
+              step: 0.5
+              unit_of_measurement: degrees
+        dynamic_lighting_time_start_morning:
+          name: "Dynamic Lighting - Time Morning - Start Point"
+          description: "Morning start time."
+          default: "06:00:00"
+          selector:
+            time:
+        dynamic_lighting_time_end_morning:
+          name: "Dynamic Lighting - Time Morning - End Point"
+          description: "Morning end time."
+          default: "09:00:00"
+          selector:
+            time:
+        dynamic_lighting_time_start_evening:
+          name: "Dynamic Lighting - Time Evening - Start Point"
+          description: "Evening start time."
+          default: "17:00:00"
+          selector:
+            time:
+        dynamic_lighting_time_end_evening:
+          name: "Dynamic Lighting - Time Evening - End Point"
+          description: "Evening end time."
+          default: "19:00:00"
+          selector:
+            time:
+        dynamic_lighting_heartbeat:
+          name: "Dynamic Lighting - Heartbeat"
+          description: "Update frequency for dynamic lighting."
+          default: 1
+          selector:
+            number:
+              min: 0.25
+              max: 10
+              step: 0.25
+              unit_of_measurement: minutes
+        dynamic_lighting_step_value:
+          name: "Dynamic Lighting - Step Value"
+          description: "Incremental step for brightness changes."
+          default: 4
+          selector:
+            number:
+              min: 1
+              max: 100
+              step: 1
+              unit_of_measurement: '%'
+        dynamic_lighting_dead_zone:
+          name: "Dynamic Lighting - Dead Zone (±)"
+          description: "Range to prevent minor brightness fluctuations."
+          default: 7
+          selector:
+            number:
+              min: 0
+              max: 15
+              step: 1
+              unit_of_measurement: '%'
+        dynamic_lighting_state_control:
+          name: "Dynamic Lighting - State Control Option"
+          description: "Enable/disable based on entity state."
+          default: disable_state_control
+          selector:
+            select:
+              options:
+                - label: Enable State Control Option
+                  value: "enable_state_control"
+                - label: Disable State Control Option
+                  value: "disable_state_control"
+        dynamic_lighting_state_control_activation_state:
+          name: "Dynamic Lighting - State Control Activation State"
+          description: "State to activate dynamic lighting."
+          default: "on"
+          selector:
+            select:
+              options:
+                - label: ON State
+                  value: "on"
+                - label: OFF State
+                  value: "off"
+        dynamic_lighting_state_control_entity:
+          name: "Dynamic Lighting - State Control Entity"
+          description: "Entity to control dynamic lighting."
+          default: []
+          selector:
+            entity:
+
+    # BYPASS SETTINGS
+    bypass_settings:
+      name: "Bypass"
+      icon: mdi:cog-pause-outline
+      collapsed: true
+      input:
+        include_bypass:
+          name: "Use The Bypass Options"
+          description: "Options for manual bypassing of trigger sensors."
+          default: []
+          selector:
+            select:
+              options:
+                - label: 1 - Enable the Bypass - Turn the Lights ON
+                  value: "bypass_enabled_turn_on"
+                - label: 2 - Enable the Bypass - Turn the Lights OFF
+                  value: "bypass_enabled_turn_off"
+                - label: 3 - Enable the Bypass - Keep the Lights Current State
+                  value: "bypass_enabled_stop"
+              multiple: true
+        motion_bypass_lights_on:
+          name: "Bypass Switch - Turn the Lights ON"
+          description: "Switches to turn lights ON and bypass sensor."
+          default: []
+          selector:
+            entity:
+              multiple: true
+        motion_bypass_lights_off:
+          name: "Bypass Switch - Turn the Lights OFF"
+          description: "Switches to turn lights OFF and bypass sensor."
+          default: []
+          selector:
+            entity:
+              multiple: true
+        motion_bypass_lights_stop:
+          name: "Bypass Switch - Keep the Lights Current State"
+          description: "Switches to maintain current light state and bypass sensor."
+          default: []
+          selector:
+            entity:
+              multiple: true
+        bypass_time_delay:
+          name: "Bypass - Time Delay"
+          description: "Delay before turning lights OFF with bypass."
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 10
+              step: 0.25
+              unit_of_measurement: minutes
+        include_bypass_auto_off:
+          name: "Use The Bypass Auto OFF Option"
+          description: "Auto-OFF options for bypass switches."
+          default: []
+          selector:
+            select:
+              options:
+                - label: A - Enable Auto OFF for Bypass Option 1
+                  value: "bypass_auto_off_enabled_on"
+                - label: B - Enable Auto OFF for Bypass Option 2
+                  value: "bypass_auto_off_enabled_off"
+                - label: C - Enable Auto OFF for Bypass Option 3
+                  value: "bypass_auto_off_enabled_stop"
+              multiple: true
+        bypass_auto_off_delay:
+          name: "Bypass Auto OFF - Time Delay"
+          description: "Minutes before auto-turning OFF bypass."
+          default: 60
+          selector:
+            number:
+              min: 1
+              max: 240
+              step: 1
+              unit_of_measurement: minutes
+
+    # SUN ELEVATION SETTINGS
+    sun_settings:
+      name: "Sun Elevation"
+      icon: mdi:weather-sunny
+      collapsed: true
+      input:
+        include_sun:
+          name: "Use The Sun Option"
+          description: "Enable sun-based lighting control."
+          default: sun_disabled
+          selector:
+            select:
+              options:
+                - label: Enable the sun option
+                  value: "sun_enabled"
+                - label: Disable the sun option
+                  value: "sun_disabled"
+        sun_elevation:
+          name: "Sun Elevation Falling"
+          description: "Sun elevation threshold (falling)."
+          default: -1.5
+          selector:
+            number:
+              min: -10
+              max: 5
+              step: 0.5
+              unit_of_measurement: degrees
+        sun_elevation_rising:
+          name: "Sun Elevation Rising"
+          description: "Sun elevation threshold (rising)."
+          default: -4.0
+          selector:
+            number:
+              min: -10
+              max: 5
+              step: 0.5
+              unit_of_measurement: degrees
+
+    # AMBIENT LIGHT SETTINGS
+    ambient_settings:
+      name: "Ambient"
+      icon: mdi:theme-light-dark
+      collapsed: true
+      input:
+        include_ambient:
+          name: "Use The Ambient Options"
+          description: "Ambient light sensor control."
+          default: ambient_disabled
+          selector:
+            select:
+              options:
+                - label: Enable the ambient options
+                  value: "ambient_enabled"
+                - label: Disable the ambient options
+                  value: "ambient_disabled"
+        ambient_light_sensor:
+          name: "Ambient Light Sensor"
+          description: "Sensor for ambient light level."
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                device_class: illuminance
+        ambient_light_options:
+          name: "Ambient Light Sensor - Site Conditions"
+          description: "Configure if light affects the sensor."
+          default: ambient_light_option_disabled
+          selector:
+            select:
+              options:
+                - label: YES - My Ambient Light Sensor is affected by the Lights
+                  value: "ambient_light_option_enabled"
+                - label: NO - My Ambient Light Sensor is not affected by the Lights
+                  value: "ambient_light_option_disabled"
+        ambient_light_value:
+          name: "Ambient Light - Low Lux Value"
+          description: "Lux threshold to turn ON lights."
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 500
+              step: 10
+              unit_of_measurement: lux
+        ambient_light_high_value:
+          name: "Ambient Light - High Lux Value"
+          description: "Lux threshold to turn OFF lights."
+          default: 80
+          selector:
+            number:
+              min: 0
+              max: 1000
+              step: 10
+              unit_of_measurement: lux
+
+    # TIME SETTINGS
+    time_settings:
+      name: "Time"
+      icon: mdi:clock-outline
+      collapsed: true
+      input:
+        include_time:
+          name: "Use The Time Options"
+          description: "Time-based control."
+          default: time_disabled
+          selector:
+            select:
+              options:
+                - label: Enable the time options
+                  value: "time_enabled"
+                - label: Disable the time options
+                  value: "time_disabled"
+        after_time:
+          name: "Start Time"
+          description: "When to start automation."
+          default: 00:00:00
+          selector:
+            time:
+        before_time:
+          name: "End Time"
+          description: "When to end automation."
+          default: 00:00:00
+          selector:
+            time:
+        weekday_options:
+          name: "Weekdays"
+          description: "Days when automation is active."
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              multiple: true
+              mode: list
+              options:
+                - label: Monday
+                  value: "mon"
+                - label: Tuesday
+                  value: "tue"
+                - label: Wednesday
+                  value: "wed"
+                - label: Thursday
+                  value: "thu"
+                - label: Friday
+                  value: "fri"
+                - label: Saturday
+                  value: "sat"
+                - label: Sunday
+                  value: "sun"
+
+    # DEVICE TRACKER SETTINGS
+    device_tracker_settings:
+      name: "Device Tracker"
+      icon: mdi:account-multiple-check-outline
+      collapsed: true
+      input:
+        include_device_tracker:
+          name: "Use The Device Tracker Options"
+          description: "Track devices for presence detection."
+          default: device_tracker_disabled
+          selector:
+            select:
+              options:
+                - label: Enable the zone option
+                  value: "zone_enabled"
+                - label: Enable the zone + people options
+                  value: "zone_people_enabled"
+                - label: Disable the device tracker options
+                  value: "device_tracker_disabled"
+        zone:
+          name: "Device Tracker - Zone"
+          description: "Zone for tracking devices."
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: zone
+        people:
+          name: "Device Tracker - People"
+          description: "People to track in the zone."
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                domain:
+                  - person
+
+    # NIGHT LIGHTS TRIGGER SETTINGS
+    night_lights_trigger_settings:
+      name: "Night Lights Settings"
+      icon: mdi:weather-night
+      collapsed: true
+      input:
+        include_night_lights:
+          name: "Use The Night Lights Options"
+          description: "Special lighting for nighttime."
+          default: night_lights_disabled
+          selector:
+            select:
+              options:
+                - label: Enable the night lights options
+                  value: "night_lights_enabled"
+                - label: Disable the night lights options
+                  value: "night_lights_disabled"
+        night_lights_conditions:
+          name: "Night Lights Conditions"
+          description: "Conditions that trigger night lights."
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Enable entity state option
+                  value: "entity_state_enabled"
+                - label: Enable time option
+                  value: "time_enabled"
+                - label: Enable sun elevation option
+                  value: "sun_enabled"
+        night_lights_entity_state:
+          name: "Night Lights - Entity State"
+          description: "Entity to trigger night lights."
+          default: []
+          selector:
+            entity:
+              multiple: true
+        night_lights_after_time:
+          name: "Night Lights - Start Time"
+          description: "When night lights activate."
+          default: 00:00:00
+          selector:
+            time:
+        night_lights_before_time:
+          name: "Night Lights - End Time"
+          description: "When night lights deactivate."
+          default: 00:00:00
+          selector:
+            time:
+        night_lights_sun_elevation:
+          name: "Night Lights - Sun Elevation Falling"
+          description: "Sun elevation threshold (falling)."
+          default: -1.5
+          selector:
+            number:
+              min: -10
+              max: 5
+              step: 0.5
+              unit_of_measurement: degrees
+        night_lights_sun_elevation_rising:
+          name: "Night Lights - Sun Elevation Rising"
+          description: "Sun elevation threshold (rising)."
+          default: -4.0
+          selector:
+            number:
+              min: -10
+              max: 5
+              step: 0.5
+              unit_of_measurement: degrees
+
+    # NIGHT LIGHTS SETTINGS
+    night_lights_settings:
+      name: "Night Lights"
+      icon: mdi:lightbulb-night-outline
+      collapsed: true
+      input:
+        night_lights:
+          name: "Night Lights"
+          description: "Entities controlled during night mode."
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: 
+                  - light
+                  - switch
+                  - scene
+                  - script
+        night_boolean_scenes_scripts:
+          name: "Night Lights - Scenes & Scripts - Toggle Helper"
+          description: "Toggle helper for night mode scenes/scripts."
+          default: []
+          selector:
+            entity:
+              filter:
+                domain:
+                  - input_boolean
+        night_time_delay:
+          name: "Night Lights - Time Delay"
+          description: "Minutes before turning OFF night lights."
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 0.5
+              unit_of_measurement: minutes
+
+    # NIGHT LIGHT CONTROL SETTINGS
+    night_lights_light_control_settings:
+      name: "Night Light Control"
+      icon: mdi:lightbulb-on-80
+      collapsed: true
+      input:
+        include_night_light_control:
+          name: "Night Lights - Light Control Options"
+          description: "Light control options for night lights."
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Use brightness
+                  value: "use_brightness"
+                - label: Use transition
+                  value: "use_transition"
+                - label: If lights are ON, adjust when crossing over
+                  value: "if_lights_are_on_adjust_when_crossing_over"
+                - label: Yes - Manage OFF script when crossing over
+                  value: "manage_scripts_crossing_over"
+        night_light_brightness:
+          name: "Night Lights - Brightness"
+          description: "Brightness for night lights."
+          default: 20
+          selector:
+            number:
+              min: 1
+              max: 100
+              mode: slider
+              step: 1
+              unit_of_measurement: '%'
+        night_light_transition_on:
+          name: "Night Lights - Transition - ON"
+          description: "Transition time for turning ON night lights."
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 5
+              mode: slider
+              step: 0.5
+              unit_of_measurement: seconds
+        night_light_transition_off:
+          name: "Night Lights - Transition - OFF"
+          description: "Transition time for turning OFF night lights."
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 30
+              mode: slider
+              step: 1
+              unit_of_measurement: seconds
+        include_night_light_colour_control:
+          name: "Night Lights - Light Color Control Options"
+          description: "Color control for night lights."
+          default: disable_colour_control
+          selector:
+            select:
+              options:
+                - label: Use Color Temperature
+                  value: "use_colour_temperature"
+                - label: Use RGB Color
+                  value: "use_rgb_colour"
+                - label: Use RGBW Color
+                  value: "use_rgbw_colour"
+                - label: Use RGBWW Color
+                  value: "use_rgbww_colour"
+                - label: Disable Color Control
+                  value: "disable_colour_control"
+        night_light_colour_temperature:
+          name: "Night Lights - Color Temperature"
+          description: "Color temperature for night lights."
+          default: 5000
+          selector:
+            number:
+              min: 2000
+              max: 8000
+              mode: slider
+              step: 100
+              unit_of_measurement: 'kelvin'
+        night_light_rgb_colour:
+          name: "Night Lights - RGB Color"
+          description: "RGB color for night lights."
+          default: [255, 255, 255]
+          selector:
+            color_rgb:
+        night_light_rgbw_colour:
+          name: "Night Lights - RGBW Color"
+          description: "RGBW color for night lights."
+          default: [255, 255, 255, 255]
+          selector:
+            object:
+        night_light_rgbww_colour:
+          name: "Night Lights - RGBWW Color"
+          description: "RGBWW color for night lights."
+          default: [255, 255, 255, 255, 255]
+          selector:
+            object:
+
+    # NIGHT GLOW SETTINGS
+    night_lights_night_glow:
+      name: "Night Glow"
+      icon: mdi:candle
+      collapsed: true
+      input:
+        include_night_glow:
+          name: "Night Glow"
+          description: "Low-level ambient light when no motion detected."
+          default: night_glow_disabled
+          selector:
+            select:
+              options:
+                - label: Enable night glow
+                  value: "night_glow_enabled"
+                - label: Disable night glow
+                  value: "night_glow_disabled"
+        night_glow_lights:
+          name: "Night Glow - Lights"
+          description: "Entities for night glow feature."
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: 
+                  - light
+                  - switch
+                  - scene
+                  - script
+        include_night_glow_light_control:
+          name: "Night Glow - Light Control Options"
+          description: "Light control options for night glow."
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Use brightness
+                  value: "use_brightness"
+                - label: Use transition
+                  value: "use_transition"
+        night_glow_light_brightness:
+          name: "Night Glow - Brightness"
+          description: "Brightness for night glow."
+          default: 20
+          selector:
+            number:
+              min: 1
+              max: 100
+              mode: slider
+              step: 1
+              unit_of_measurement: '%'
+        night_glow_light_transition_on:
+          name: "Night Glow - Transition - ON"
+          description: "Transition time for turning ON night glow."
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 5
+              mode: slider
+              step: 0.5
+              unit_of_measurement: seconds
+        night_glow_light_transition_off:
+          name: "Night Glow - Transition - OFF"
+          description: "Transition time for turning OFF night glow."
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 30
+              mode: slider
+              step: 1
+              unit_of_measurement: seconds
+        include_night_glow_light_colour_control:
+          name: "Night Glow - Light Color Control Options"
+          description: "Color control for night glow."
+          default: disable_colour_control
+          selector:
+            select:
+              options:
+                - label: Use Color Temperature
+                  value: "use_colour_temperature"
+                - label: Use RGB Color
+                  value: "use_rgb_colour"
+                - label: Use RGBW Color
+                  value: "use_rgbw_colour"
+                - label: Use RGBWW Color
+                  value: "use_rgbww_colour"
+                - label: Disable Color Control
+                  value: "disable_colour_control"
+        night_glow_light_colour_temperature:
+          name: "Night Glow - Color Temperature"
+          description: "Color temperature for night glow."
+          default: 5000
+          selector:
+            number:
+              min: 2000
+              max: 8000
+              mode: slider
+              step: 100
+              unit_of_measurement: 'kelvin'
+        night_glow_light_rgb_colour:
+          name: "Night Glow - RGB Color"
+          description: "RGB color for night glow."
+          default: [255, 255, 255]
+          selector:
+            color_rgb:
+        night_glow_light_rgbw_colour:
+          name: "Night Glow - RGBW Color"
+          description: "RGBW color for night glow."
+          default: [255, 255, 255, 255]
+          selector:
+            object:
+        night_glow_light_rgbww_colour:
+          name: "Night Glow - RGBWW Color"
+          description: "RGBWW color for night glow."
+          default: [255, 255, 255, 255, 255]
+          selector:
+            object:
+    
+    # SMART OVERRIDE SETTINGS
+    smart_override_settings:
+      name: "Smart Override"
+      icon: mdi:gesture-tap-hold
+      collapsed: true
+      input:
+        room_name:
+          name: "Room Name"
+          description: "Name of the room for logging and helper entities."
+          default: "room"
+          selector:
+            text:
+        automation_active_helper:
+          name: "Automation Active Helper"
+          description: "Input boolean to track if automation is active."
+          default: []
+          selector:
+            entity:
+              domain: input_boolean
+        manual_override_helper:
+          name: "Manual Override Helper"
+          description: "Input boolean to track manual override state."
+          default: []
+          selector:
+            entity:
+              domain: input_boolean
+        light_auto_on_helper:
+          name: "Light Auto On Helper"
+          description: "Input boolean to track if light was turned on by automation."
+          default: []
+          selector:
+            entity:
+              domain: input_boolean
+        last_automation_action_helper:
+          name: "Last Automation Action Helper"
+          description: "Input text to store timestamp of last automation action."
+          default: []
+          selector:
+            entity:
+              domain: input_text
+        dark_threshold_input:
+          name: "Dark Threshold Number"
+          description: "Input number for the dark threshold."
+          default: []
+          selector:
+            entity:
+              domain: input_number
+        bright_threshold_input:
+          name: "Bright Threshold Number"
+          description: "Input number for the bright threshold."
+          default: []
+          selector:
+            entity:
+              domain: input_number
+        extremely_dark_threshold_input:
+          name: "Extremely Dark Threshold Number"
+          description: "Input number for the extremely dark threshold."
+          default: []
+          selector:
+            entity:
+              domain: input_number
+        override_timeout_hours_input:
+          name: "Override Timeout Hours Number"
+          description: "Input number for override timeout hours."
+          default: []
+          selector:
+            entity:
+              domain: input_number
+        occupancy_off_latency:
+          name: "Occupancy Off Latency Sensor"
+          description: "Sensor for occupancy latency (EPO1)."
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: number
+        include_logging:
+          name: "Include Detailed Logging"
+          description: "Enable detailed logging to system log."
+          default: false
+          selector:
+            boolean:
 
 mode: restart
 max_exceeded: silent
 
 variables:
+  # Basic settings
   motion_trigger: !input trigger
-  room_name: !input room_name
-  light_switch: !input light_switch
-  automation_active_helper: !input automation_active_helper
-  manual_override_helper: !input manual_override_helper
-  light_auto_on_helper: !input light_auto_on_helper
-  last_automation_action_helper: !input last_automation_action_helper
-  illuminance_sensor: !input illuminance_sensor
-  dark_threshold: !input dark_threshold
-  bright_threshold: !input bright_threshold
-  extremely_dark_threshold: !input extremely_dark_threshold
-  override_timeout_hours: !input override_timeout_hours
-  time_delay_minutes: !input time_delay
-  include_logging: !input include_logging
-  occupancy_off_latency: !input occupancy_off_latency
+  room_name: !input smart_override_settings.room_name
+  light_switch: !input lights_settings
+  time_delay: !input time_delay
+  
+  # Helper entities
+  automation_active_helper: !input smart_override_settings.automation_active_helper
+  manual_override_helper: !input smart_override_settings.manual_override_helper
+  light_auto_on_helper: !input smart_override_settings.light_auto_on_helper
+  last_automation_action_helper: !input smart_override_settings.last_automation_action_helper
+  occupancy_off_latency: !input smart_override_settings.occupancy_off_latency
+  include_logging: !input smart_override_settings.include_logging
+  
+  # Threshold values
+  dark_threshold: >-
+    {% if smart_override_settings.dark_threshold_input %}
+      {{ states(smart_override_settings.dark_threshold_input) | float(15) }}
+    {% else %}
+      15
+    {% endif %}
+  bright_threshold: >-
+    {% if smart_override_settings.bright_threshold_input %}
+      {{ states(smart_override_settings.bright_threshold_input) | float(70) }}
+    {% else %}
+      70
+    {% endif %}
+  extremely_dark_threshold: >-
+    {% if smart_override_settings.extremely_dark_threshold_input %}
+      {{ states(smart_override_settings.extremely_dark_threshold_input) | float(5) }}
+    {% else %}
+      5
+    {% endif %}
+  override_timeout_hours: >-
+    {% if smart_override_settings.override_timeout_hours_input %}
+      {{ states(smart_override_settings.override_timeout_hours_input) | float(2) }}
+    {% else %}
+      2
+    {% endif %}
+  
+  # Include light control settings
+  include_light_control: !input normal_lights_settings.include_light_control
+  light_brightness: !input normal_lights_settings.light_brightness
+  light_transition_on: !input normal_lights_settings.light_transition_on
+  light_transition_off: !input normal_lights_settings.light_transition_off
+  include_light_colour_control: !input normal_lights_settings.include_light_colour_control
+  light_colour_temperature: !input normal_lights_settings.light_colour_temperature
+  light_rgb_colour: !input normal_lights_settings.light_rgb_colour
+  light_rgbw_colour: !input normal_lights_settings.light_rgbw_colour
+  light_rgbww_colour: !input normal_lights_settings.light_rgbww_colour
+  
+  # Dynamic lighting
+  include_dynamic_lighting: !input dynamic_lighting_settings.include_dynamic_lighting
+  dynamic_lighting_lux_sensor: !input dynamic_lighting_settings.dynamic_lighting_lux_sensor
+  dynamic_lighting_max_lux: !input dynamic_lighting_settings.dynamic_lighting_max_lux
+  dynamic_lighting_min_lux: !input dynamic_lighting_settings.dynamic_lighting_min_lux
+  dynamic_lighting_max_brightness: !input dynamic_lighting_settings.dynamic_lighting_max_brightness
+  dynamic_lighting_min_brightness: !input dynamic_lighting_settings.dynamic_lighting_min_brightness
+  dynamic_lighting_boolean: !input dynamic_lighting_settings.dynamic_lighting_boolean
+  
+  # Bypass settings
+  include_bypass: !input bypass_settings.include_bypass
+  motion_bypass_lights_on: !input bypass_settings.motion_bypass_lights_on
+  motion_bypass_lights_off: !input bypass_settings.motion_bypass_lights_off
+  motion_bypass_lights_stop: !input bypass_settings.motion_bypass_lights_stop
+  bypass_time_delay: !input bypass_settings.bypass_time_delay
+  include_bypass_auto_off: !input bypass_settings.include_bypass_auto_off
+  bypass_auto_off_delay: !input bypass_settings.bypass_auto_off_delay
+  
+  # Other inputs from sections
+  include_sun: !input sun_settings.include_sun
+  sun_elevation: !input sun_settings.sun_elevation
+  sun_elevation_rising: !input sun_settings.sun_elevation_rising
+  include_ambient: !input ambient_settings.include_ambient
+  ambient_light_sensor: !input ambient_settings.ambient_light_sensor
+  ambient_light_options: !input ambient_settings.ambient_light_options
+  ambient_light_value: !input ambient_settings.ambient_light_value
+  ambient_light_high_value: !input ambient_settings.ambient_light_high_value
+  include_time: !input time_settings.include_time
+  after_time: !input time_settings.after_time
+  before_time: !input time_settings.before_time
+  weekday_options: !input time_settings.weekday_options
+  include_device_tracker: !input device_tracker_settings.include_device_tracker
+  zone: !input device_tracker_settings.zone
+  people: !input device_tracker_settings.people
+  
+  # Night lights settings
+  include_night_lights: !input night_lights_trigger_settings.include_night_lights
+  night_lights_conditions: !input night_lights_trigger_settings.night_lights_conditions
+  night_lights_entity_state: !input night_lights_trigger_settings.night_lights_entity_state
+  night_lights_after_time: !input night_lights_trigger_settings.night_lights_after_time
+  night_lights_before_time: !input night_lights_trigger_settings.night_lights_before_time
+  night_lights_sun_elevation: !input night_lights_trigger_settings.night_lights_sun_elevation
+  night_lights_sun_elevation_rising: !input night_lights_trigger_settings.night_lights_sun_elevation_rising
+  night_lights: !input night_lights_settings.night_lights
+  night_boolean_scenes_scripts: !input night_lights_settings.night_boolean_scenes_scripts
+  night_time_delay: !input night_lights_settings.night_time_delay
+  
+  # Night light control settings
+  include_night_light_control: !input night_lights_light_control_settings.include_night_light_control
+  night_light_brightness: !input night_lights_light_control_settings.night_light_brightness
+  night_light_transition_on: !input night_lights_light_control_settings.night_light_transition_on
+  night_light_transition_off: !input night_lights_light_control_settings.night_light_transition_off
+  include_night_light_colour_control: !input night_lights_light_control_settings.include_night_light_colour_control
+  night_light_colour_temperature: !input night_lights_light_control_settings.night_light_colour_temperature
+  night_light_rgb_colour: !input night_lights_light_control_settings.night_light_rgb_colour
+  night_light_rgbw_colour: !input night_lights_light_control_settings.night_light_rgbw_colour
+  night_light_rgbww_colour: !input night_lights_light_control_settings.night_light_rgbww_colour
+  
+  # Night glow settings
+  include_night_glow: !input night_lights_night_glow.include_night_glow
+  night_glow_lights: !input night_lights_night_glow.night_glow_lights
+  include_night_glow_light_control: !input night_lights_night_glow.include_night_glow_light_control
+  night_glow_light_brightness: !input night_lights_night_glow.night_glow_light_brightness
+  night_glow_light_transition_on: !input night_lights_night_glow.night_glow_light_transition_on
+  night_glow_light_transition_off: !input night_lights_night_glow.night_glow_light_transition_off
+  include_night_glow_light_colour_control: !input night_lights_night_glow.include_night_glow_light_colour_control
+  night_glow_light_colour_temperature: !input night_lights_night_glow.night_glow_light_colour_temperature
+  night_glow_light_rgb_colour: !input night_lights_night_glow.night_glow_light_rgb_colour
+  night_glow_light_rgbw_colour: !input night_lights_night_glow.night_glow_light_rgbw_colour
+  night_glow_light_rgbww_colour: !input night_lights_night_glow.night_glow_light_rgbww_colour
   
   # Calculate sensor latency and vacancy timeout
   sensor_off_latency_seconds: >-
@@ -179,38 +1252,90 @@ variables:
     {% else %}
       10
     {% endif %}
+  
   vacancy_timeout_minutes: >-
     {% if occupancy_off_latency %}
-      {{ ([((sensor_off_latency_seconds * 5) / 60) | round(0, 'ceil'), 1] | max) | int(5) }}
+      {{ ([((sensor_off_latency_seconds * 5) / 60) | round(0, 'ceil'), 1] | max) | int(time_delay) }}
     {% else %}
-      {{ time_delay_minutes }}
+      {{ time_delay }}
     {% endif %}
   
-  # Light states
+  # Split domains for light switch targets
   light_entities: >
     {{ expand(light_switch.entity_id) | selectattr('domain', 'eq', 'light') | map(attribute='entity_id') | list }}
+  
   switch_entities: >
     {{ expand(light_switch.entity_id) | selectattr('domain', 'eq', 'switch') | map(attribute='entity_id') | list }}
+  
   scene_entities: >-
-    {{ expand(light_switch.entity_id) | selectattr('domain', 'eq', 'scene') | map(attribute='entity_id') | list }}
+    {% set a = light_switch.entity_id %}
+    {% if boolean_scenes_scripts == [] %}
+      {{ expand(a) | selectattr('domain', 'eq', 'scene') | map(attribute='entity_id') | list }}
+    {% elif is_state(boolean_scenes_scripts, 'off') %}
+      {{ expand(a) | selectattr('domain', 'eq', 'scene') | map(attribute='entity_id') | list }}
+    {% else %}
+      []
+    {% endif %}
+  
   script_entities: >-
-    {{ expand(light_switch.entity_id) | selectattr('domain', 'eq', 'script') | map(attribute='entity_id') | list }}
+    {% set a = light_switch.entity_id %}
+    {% if boolean_scenes_scripts == [] %}
+      {{ expand(a) | selectattr('domain', 'eq', 'script') | map(attribute='entity_id') | list }}
+    {% elif is_state(boolean_scenes_scripts, 'off') %}
+      {{ expand(a) | selectattr('domain', 'eq', 'script') | map(attribute='entity_id') | list }}
+    {% else %}
+      []
+    {% endif %}
+  
+  boolean_scenes_scripts_helper: >-
+    {% if boolean_scenes_scripts | length > 0 and states(boolean_scenes_scripts) == 'off' %}
+      {{ boolean_scenes_scripts }}
+    {% else %}
+      []
+    {% endif %}
+  
+  # Split domains for end scenes and scripts
+  end_scene_entities: "{{ end_scenes | select('match', '^scene\\..*') | list }}"
+  end_script_entities: "{{ end_scenes | select('match', '^script\\..*') | list }}"
+  
+  # For light control - Light data
+  light_data: >-
+    {% set light = namespace(data={}) %}
+    {% if 'use_transition' in include_light_control %}
+      {% set light.data = dict(light.data, **{ 'transition': light_transition_on }) %}
+    {% endif %}
+    {% if 'use_brightness' in include_light_control %}
+      {% set light.data = dict(light.data, **{ 'brightness_pct': light_brightness }) %}
+    {% endif %}
+    {% if include_light_colour_control == 'use_colour_temperature' %}
+      {% set light.data = dict(light.data, **{ 'color_temp_kelvin': light_colour_temperature }) %}
+    {% endif %}
+    {% if include_light_colour_control == 'use_rgb_colour' %}
+      {% set light.data = dict(light.data, **{ 'rgb_color': light_rgb_colour }) %}
+    {% endif %}
+    {% if include_light_colour_control == 'use_rgbw_colour' %}
+      {% set light.data = dict(light.data, **{ 'rgbw_color': light_rgbw_colour }) %}
+    {% endif %}
+    {% if include_light_colour_control == 'use_rgbww_colour' %}
+      {% set light.data = dict(light.data, **{ 'rgbww_color': light_rgbww_colour }) %}
+    {% endif %}
+    {{ light.data }}
   
   # State variables
   illuminance: >-
-    {% if illuminance_sensor %}
-      {{ states(illuminance_sensor)|float(0) }}
+    {% if ambient_light_sensor %}
+      {{ states(ambient_light_sensor)|float(0) }}
     {% else %}
       100
     {% endif %}
+  
   is_dark: "{{ illuminance < dark_threshold }}"
   is_bright: "{{ illuminance > bright_threshold }}"
   is_extremely_dark: "{{ illuminance < extremely_dark_threshold }}"
   in_middle_range: "{{ not is_dark and not is_bright }}"
-  someone_present: "{{ is_state(motion_trigger, 'on') }}"
-  sun_state: "{{ states('sun.sun') }}"
-  is_daytime: "{{ sun_state == 'above_horizon' }}"
-  is_nighttime: "{{ sun_state == 'below_horizon' }}"
+  
+  pir_active: "{{ is_state(motion_trigger[0], 'on') }}"
+  someone_present: "{{ pir_active }}"
   
   # Determine if any lights are on
   lights_on: >-
@@ -222,15 +1347,24 @@ variables:
     {% endfor %}
     {{ lights_on }}
   
-  # User action detection
+  # Override detection variables  
+  vacant_for_timeout: >-
+    {{ not someone_present and 
+      (now() - states[motion_trigger[0]].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) }}
+  
   user_toggled_lights: "{{ trigger.platform == 'state' and trigger.entity_id in light_entities + switch_entities }}"
   user_turned_on: "{{ user_toggled_lights and trigger.to_state.state == 'on' }}"
   user_turned_off: "{{ user_toggled_lights and trigger.to_state.state == 'off' }}"
   
-  # Automation state tracking
   manual_override: "{{ is_state(manual_override_helper, 'on') }}"
   automation_inactive: "{{ is_state(automation_active_helper, 'off') }}"
-  light_recently_changed: "{{ trigger.platform == 'state' and trigger.entity_id in light_entities + switch_entities and (now() - trigger.to_state.last_changed).total_seconds() < 10 }}"
+  
+  sun_state: "{{ states('sun.sun') }}"
+  is_daytime: "{{ sun_state == 'above_horizon' }}"
+  is_nighttime: "{{ sun_state == 'below_horizon' }}"
+  
+  light_change_time: "{{ (now() - states[trigger.entity_id].last_changed).total_seconds() if trigger.entity_id in light_entities + switch_entities else 9999 }}"
+  light_recently_changed: "{{ light_change_time < 10 }}"
   
   # Last automation action tracking
   time_since_last_automation: >-
@@ -250,16 +1384,11 @@ variables:
       false
     {% endif %}
   
-  # Override timeout tracking
+  # Override timeout
   hourly_check: "{{ trigger.platform == 'time_pattern' }}"
   override_timeout: >-
-    {{ is_state(manual_override_helper, 'on') and override_timeout_hours > 0 and
-       (now() - states[manual_override_helper].last_changed).total_seconds() > (override_timeout_hours * 3600) }}
-  
-  # Vacancy timeout
-  vacant_for_timeout: >-
-    {{ not someone_present and 
-       (now() - states[motion_trigger[0]].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) }}
+    {{ manual_override and override_timeout_hours > 0 and
+      (now() - states[manual_override_helper].last_changed).total_seconds() > (override_timeout_hours * 3600) }}
   
   # Advanced automation intent detection
   auto_would_turn_on_intent: "{{ (is_dark or is_extremely_dark) and someone_present }}"
@@ -268,21 +1397,40 @@ variables:
     {{ (in_middle_range and someone_present) or (is_bright and someone_present) }}
 
 trigger:
+  # Motion sensor triggers
   - platform: state
     entity_id: !input trigger
+  
+  # Light switch triggers for manual override detection
   - platform: state
-    entity_id: !input light_switch
-  - platform: state
-    entity_id: !input illuminance_sensor
-  - platform: state
-    entity_id: !input occupancy_off_latency
+    entity_id: !input lights_settings
+  
+  # Sun state for sun-based lighting
   - platform: state
     entity_id: sun.sun
+  
+  # Ambient light sensor for lux-based control
+  - platform: state
+    entity_id: !input ambient_settings.ambient_light_sensor
+  
+  # Occupancy sensor latency for dynamic timeouts
+  - platform: state
+    entity_id: !input smart_override_settings.occupancy_off_latency
+  
+  # Bypass switch triggers
+  - platform: state
+    entity_id: !input bypass_settings.motion_bypass_lights_on
+  - platform: state
+    entity_id: !input bypass_settings.motion_bypass_lights_off
+  - platform: state
+    entity_id: !input bypass_settings.motion_bypass_lights_stop
+  
+  # Time-based trigger for hourly checks
   - platform: time_pattern
     hours: "/1"
 
 action:
-  # Logging
+  # LOGGING SECTION
   - choose:
     - conditions:
         - "{{ include_logging }}"
@@ -301,8 +1449,15 @@ action:
               is_extremely_dark={{ is_extremely_dark }}, someone_present={{ someone_present }},
               lights_on={{ lights_on }}, manual_override={{ manual_override }},
               vacancy_timeout_minutes={{ vacancy_timeout_minutes }}
+        - service: system_log.write
+          data:
+            level: info
+            message: >-
+              {{ room_name | upper }} AUTOMATION INTENT: auto_would_turn_on={{ auto_would_turn_on_intent }},
+              auto_would_turn_off={{ auto_would_turn_off_intent }},
+              auto_would_preserve_state={{ auto_would_preserve_state_intent }}
   
-  # Handle manual override when user toggles lights
+  # HANDLE MANUAL OVERRIDE WHEN USER TOGGLES LIGHTS
   - choose:
     - conditions:
         - "{{ user_toggled_lights and not automation_initiated_change }}"
@@ -316,21 +1471,35 @@ action:
                   level: info
                   message: >-
                     {{ room_name | upper }} MANUAL ACTION: user_turned_on={{ user_turned_on }}, 
-                    user_turned_off={{ user_turned_off }}, auto_would_turn_on={{ auto_would_turn_on_intent }},
-                    auto_would_turn_off={{ auto_would_turn_off_intent }}
+                    user_turned_off={{ user_turned_off }}
         
-        # First check if user action matches what automation would do
+        # Turn on manual override helper to mark user action
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ manual_override_helper }}"
+        
+        # Wait briefly to ensure helper state updates
+        - delay:
+            milliseconds: 100
+        
+        # Turn off auto-on helper when user manually toggles
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
+        
+        # First determine if user action matches what automation would do
         - choose:
           - conditions:
               - "{{ (user_turned_on and auto_would_turn_on_intent) or 
-                     (user_turned_off and auto_would_turn_off_intent) }}"
+                    (user_turned_off and auto_would_turn_off_intent) }}"
+              - "{{ automation_inactive }}"
+              - "{{ (now() - states[automation_active_helper].last_changed).total_seconds() > 2.0 }}"
             sequence:
               - service: input_boolean.turn_off
                 target:
                   entity_id: "{{ manual_override_helper }}"
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ light_auto_on_helper }}"
+              - delay:
+                  milliseconds: 100
               - choose:
                 - conditions:
                     - "{{ include_logging }}"
@@ -338,21 +1507,20 @@ action:
                     - service: system_log.write
                       data:
                         level: info
-                        message: "{{ room_name | upper }} MANUAL OVERRIDE: Cleared, user action matches automation intent."
+                        message: "{{ room_name | upper }} MANUAL OVERRIDE: Cleared, user action agrees with automation."
           
           # Check if user action contradicts what automation would do
           - conditions:
-              - "{{ (user_turned_on and auto_would_turn_off_intent) or
-                     (user_turned_off and auto_would_turn_on_intent) or
-                     (user_turned_on and auto_would_preserve_state_intent) or
-                     (user_turned_off and auto_would_preserve_state_intent) }}"
+              - "{{ user_turned_on }}"
+              - "{{ auto_would_turn_off_intent or auto_would_preserve_state_intent }}"
+              - "{{ automation_inactive }}"
+              - "{{ (now() - states[automation_active_helper].last_changed).total_seconds() > 2.0 }}"
             sequence:
               - service: input_boolean.turn_on
                 target:
                   entity_id: "{{ manual_override_helper }}"
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ light_auto_on_helper }}"
+              - delay:
+                  milliseconds: 100
               - choose:
                 - conditions:
                     - "{{ include_logging }}"
@@ -360,23 +1528,42 @@ action:
                     - service: system_log.write
                       data:
                         level: info
-                        message: "{{ room_name | upper }} MANUAL OVERRIDE: Enabled, user action contradicts automation intent."
+                        message: "{{ room_name | upper }} MANUAL OVERRIDE: User turned lights ON, setting override."
           
-          # Default handling for other cases
+          # Check if user turned off lights but automation would turn them on
+          - conditions:
+              - "{{ user_turned_off }}"
+              - "{{ auto_would_turn_on_intent or auto_would_preserve_state_intent }}"
+              - "{{ automation_inactive }}"
+              - "{{ (now() - states[automation_active_helper].last_changed).total_seconds() > 2.0 }}"
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: "{{ manual_override_helper }}"
+              - delay:
+                  milliseconds: 100
+              - choose:
+                - conditions:
+                    - "{{ include_logging }}"
+                  sequence:
+                    - service: system_log.write
+                      data:
+                        level: info
+                        message: "{{ room_name | upper }} MANUAL OVERRIDE: User turned lights OFF, setting override."
+          
+          # Log unclear situations
           default:
-            - service: input_boolean.turn_off
-              target:
-                entity_id: "{{ light_auto_on_helper }}"
             - choose:
               - conditions:
                   - "{{ include_logging }}"
                 sequence:
                   - service: system_log.write
                     data:
-                      level: info
-                      message: "{{ room_name | upper }} MANUAL ACTION: No override determination made."
+                      level: warning
+                      message: >-
+                        {{ room_name | upper }} OVERRIDE UNCLEAR: User toggle did not match specific override conditions.
   
-  # Check for override timeout conditions
+  # CHECK FOR OVERRIDE TIMEOUT
   - choose:
     - conditions:
         - "{{ override_timeout and override_timeout_hours > 0 }}"
@@ -384,6 +1571,9 @@ action:
         - service: input_boolean.turn_off
           target:
             entity_id: "{{ manual_override_helper }}"
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
         - choose:
           - conditions:
               - "{{ include_logging }}"
@@ -398,7 +1588,7 @@ action:
           data:
             skip_condition: true
   
-  # Check for vacancy timeout to clear override
+  # CHECK FOR VACANCY TIMEOUT TO CLEAR OVERRIDE
   - choose:
     - conditions:
         - "{{ vacant_for_timeout }}"
@@ -425,7 +1615,7 @@ action:
           data:
             skip_condition: true
   
-  # Skip if manual override is active
+  # SKIP IF MANUAL OVERRIDE IS ACTIVE
   - choose:
     - conditions:
         - "{{ manual_override }}"
@@ -443,8 +1633,80 @@ action:
                   message: "{{ room_name | upper }} MANUAL OVERRIDE: Skipping auto actions."
         - stop: "Manual override is active"
   
-  # Main automation logic
-  # Auto-ON when dark and occupied
+  # PROCESS BYPASS TRIGGERS
+  - choose:
+    - conditions:
+        - "{{ 'bypass_enabled_turn_on' in include_bypass }}"
+        - "{{ trigger.entity_id in motion_bypass_lights_on }}"
+        - "{{ trigger.to_state.state == 'on' }}"
+      sequence:
+        # Bypass actions to turn on lights
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        - service: homeassistant.turn_on
+          target:
+            entity_id: "{{ light_switch.entity_id }}"
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        
+        # Check for bypass auto-off
+        - choose:
+          - conditions:
+              - "{{ 'bypass_auto_off_enabled_on' in include_bypass_auto_off }}"
+            sequence:
+              - delay:
+                  minutes: !input bypass_settings.bypass_auto_off_delay
+              - service: homeassistant.turn_off
+                target:
+                  entity_id: "{{ motion_bypass_lights_on }}"
+  
+    # PROCESS BYPASS OFF TRIGGER
+    - conditions:
+        - "{{ 'bypass_enabled_turn_off' in include_bypass }}"
+        - "{{ trigger.entity_id in motion_bypass_lights_off }}"
+        - "{{ trigger.to_state.state == 'on' }}"
+      sequence:
+        # Bypass actions to turn off lights
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        - delay:
+            minutes: !input bypass_settings.bypass_time_delay
+        - service: homeassistant.turn_off
+          target:
+            entity_id: "{{ light_switch.entity_id }}"
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        
+        # Check for bypass auto-off
+        - choose:
+          - conditions:
+              - "{{ 'bypass_auto_off_enabled_off' in include_bypass_auto_off }}"
+            sequence:
+              - delay:
+                  minutes: !input bypass_settings.bypass_auto_off_delay
+              - service: homeassistant.turn_off
+                target:
+                  entity_id: "{{ motion_bypass_lights_off }}"
+  
+  # MAIN AUTOMATION LOGIC - AUTO-ON WHEN DARK AND OCCUPIED
   - choose:
     - conditions:
         - "{{ (is_dark or is_extremely_dark) }}"
@@ -464,9 +1726,24 @@ action:
             entity_id: "{{ last_automation_action_helper }}"
           data:
             value: "{{ now().isoformat() }}"
-        - service: homeassistant.turn_on
-          target:
-            entity_id: "{{ light_switch.entity_id }}"
+        
+        # For Dynamic Lighting
+        - choose:
+          - conditions:
+              - "{{ include_dynamic_lighting != 'disable_dynamic_lighting' }}"
+              - "{{ dynamic_lighting_state_control == 'disable_state_control' or
+                  (dynamic_lighting_state_control == 'enable_state_control' and
+                   states(dynamic_lighting_state_control_entity) == dynamic_lighting_state_control_activation_state) }}"
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: "{{ dynamic_lighting_boolean }}"
+          default:
+            - service: homeassistant.turn_on
+              target:
+                entity_id: "{{ light_switch.entity_id }}"
+              data: "{{ light_data }}"
+        
         - delay:
             milliseconds: 1500
         - service: input_boolean.turn_off
@@ -481,10 +1758,237 @@ action:
                   level: info
                   message: "{{ room_name | upper }} AUTO: Turned ON - Dark & Occupied."
   
-  # Auto-OFF when vacant
+  # AUTO-OFF WHEN VACANT
   - choose:
     - conditions:
         - "{{ not someone_present }}"
+        - "{{ lights_on }}"
+        - "{{ not manual_override }}"
+      sequence:
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        
+        # Check if dynamic lighting is active
+        - choose:
+          - conditions:
+              - "{{ include_dynamic_lighting != 'disable_dynamic_lighting' }}"
+              - "{{ dynamic_lighting_boolean|length > 0 and is_state(dynamic_lighting_boolean, 'on') }}"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ dynamic_lighting_boolean }}"
+        
+        # Turn off all controlled entities
+        - service: homeassistant.turn_off
+          target:
+            entity_id: "{{ light_switch.entity_id }}"
+        
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} AUTO: Turned OFF - Vacant."
+  
+  # NIGHT LIGHTS MODE TRANSITION
+  - choose:
+    - conditions:
+        - "{{ include_night_lights == 'night_lights_enabled' }}"
+        - "{{ someone_present }}"
+        - "{{ not manual_override }}"
+        - "{{ trigger.entity_id in motion_trigger }}"
+        - "{{ trigger.to_state.state == 'on' }}"
+        - condition: or
+          conditions:
+            - condition: and
+              conditions:
+                - "{{ 'entity_state_enabled' in night_lights_conditions }}"
+                - "{{ night_lights_entity_state|length > 0 }}"
+                - condition: state
+                  entity_id: !input night_lights_trigger_settings.night_lights_entity_state
+                  state: 'on'
+            - condition: and
+              conditions:
+                - "{{ 'time_enabled' in night_lights_conditions }}"
+                - condition: time
+                  after: !input night_lights_trigger_settings.night_lights_after_time
+                  before: !input night_lights_trigger_settings.night_lights_before_time
+            - condition: and
+              conditions:
+                - "{{ 'sun_enabled' in night_lights_conditions }}"
+                - condition: state
+                  entity_id: sun.sun
+                  state: below_horizon
+                - condition: numeric_state
+                  entity_id: sun.sun
+                  attribute: elevation
+                  below: !input night_lights_trigger_settings.night_lights_sun_elevation
+      sequence:
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        
+        # For night lights configuration
+        - service: homeassistant.turn_on
+          target:
+            entity_id: "{{ night_lights.entity_id }}"
+          data: >
+            {% set light = namespace(data={}) %}
+            {% if 'use_transition' in include_night_light_control %}
+              {% set light.data = dict(light.data, **{ 'transition': night_light_transition_on }) %}
+            {% endif %}
+            {% if 'use_brightness' in include_night_light_control %}
+              {% set light.data = dict(light.data, **{ 'brightness_pct': night_light_brightness }) %}
+            {% endif %}
+            {% if include_night_light_colour_control == 'use_colour_temperature' %}
+              {% set light.data = dict(light.data, **{ 'color_temp_kelvin': night_light_colour_temperature }) %}
+            {% endif %}
+            {% if include_night_light_colour_control == 'use_rgb_colour' %}
+              {% set light.data = dict(light.data, **{ 'rgb_color': night_light_rgb_colour }) %}
+            {% endif %}
+            {% if include_night_light_colour_control == 'use_rgbw_colour' %}
+              {% set light.data = dict(light.data, **{ 'rgbw_color': night_light_rgbw_colour }) %}
+            {% endif %}
+            {% if include_night_light_colour_control == 'use_rgbww_colour' %}
+              {% set light.data = dict(light.data, **{ 'rgbww_color': night_light_rgbww_colour }) %}
+            {% endif %}
+            {{ light.data }}
+        
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} AUTO: Activated night lights mode."
+  
+  # NIGHT GLOW ACTIVATION WHEN ROOM BECOMES VACANT
+  - choose:
+    - conditions:
+        - "{{ include_night_glow == 'night_glow_enabled' }}"
+        - "{{ not someone_present }}"
+        - "{{ not manual_override }}"
+        - "{{ trigger.entity_id in motion_trigger }}"
+        - "{{ trigger.to_state.state == 'off' }}"
+        - condition: or
+          conditions:
+            - condition: and
+              conditions:
+                - "{{ 'entity_state_enabled' in night_lights_conditions }}"
+                - "{{ night_lights_entity_state|length > 0 }}"
+                - condition: state
+                  entity_id: !input night_lights_trigger_settings.night_lights_entity_state
+                  state: 'on'
+            - condition: and
+              conditions:
+                - "{{ 'time_enabled' in night_lights_conditions }}"
+                - condition: time
+                  after: !input night_lights_trigger_settings.night_lights_after_time
+                  before: !input night_lights_trigger_settings.night_lights_before_time
+            - condition: and
+              conditions:
+                - "{{ 'sun_enabled' in night_lights_conditions }}"
+                - condition: state
+                  entity_id: sun.sun
+                  state: below_horizon
+                - condition: numeric_state
+                  entity_id: sun.sun
+                  attribute: elevation
+                  below: !input night_lights_trigger_settings.night_lights_sun_elevation
+      sequence:
+        - delay:
+            minutes: !input night_lights_settings.night_time_delay
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        
+        # Turn on night glow 
+        - service: homeassistant.turn_off
+          target:
+            entity_id: "{{ night_lights.entity_id }}"
+            
+        - service: homeassistant.turn_on
+          target:
+            entity_id: "{{ night_glow_lights.entity_id }}"
+          data: >
+            {% set light = namespace(data={}) %}
+            {% if 'use_transition' in include_night_glow_light_control %}
+              {% set light.data = dict(light.data, **{ 'transition': night_glow_light_transition_on }) %}
+            {% endif %}
+            {% if 'use_brightness' in include_night_glow_light_control %}
+              {% set light.data = dict(light.data, **{ 'brightness_pct': night_glow_light_brightness }) %}
+            {% endif %}
+            {% if include_night_glow_light_colour_control == 'use_colour_temperature' %}
+              {% set light.data = dict(light.data, **{ 'color_temp_kelvin': night_glow_light_colour_temperature }) %}
+            {% endif %}
+            {% if include_night_glow_light_colour_control == 'use_rgb_colour' %}
+              {% set light.data = dict(light.data, **{ 'rgb_color': night_glow_light_rgb_colour }) %}
+            {% endif %}
+            {% if include_night_glow_light_colour_control == 'use_rgbw_colour' %}
+              {% set light.data = dict(light.data, **{ 'rgbw_color': night_glow_light_rgbw_colour }) %}
+            {% endif %}
+            {% if include_night_glow_light_colour_control == 'use_rgbww_colour' %}
+              {% set light.data = dict(light.data, **{ 'rgbww_color': night_glow_light_rgbww_colour }) %}
+            {% endif %}
+            {{ light.data }}
+            
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} AUTO: Activated night glow mode."
+  
+  # TIME/AMBIENT/SUN CONDITION CHANGES - OFF TRIGGERS
+  - choose:
+    # Light should turn off based on sun elevation rising
+    - conditions:
+        - "{{ include_sun == 'sun_enabled' }}"
+        - "{{ trigger.entity_id == 'sun.sun' }}"
+        - "{{ is_state_attr('sun.sun', 'rising', true) }}"
+        - "{{ state_attr('sun.sun', 'elevation') > sun_elevation_rising }}"
         - "{{ lights_on }}"
         - "{{ not manual_override }}"
       sequence:
@@ -514,9 +2018,81 @@ action:
               - service: system_log.write
                 data:
                   level: info
-                  message: "{{ room_name | upper }} AUTO: Turned OFF - Vacant."
+                  message: "{{ room_name | upper }} AUTO: Turned OFF - Sun is risen above threshold."
+    
+    # Light should turn off based on ambient light threshold
+    - conditions:
+        - "{{ include_ambient == 'ambient_enabled' }}"
+        - "{{ trigger.entity_id == ambient_light_sensor }}"
+        - "{{ states(ambient_light_sensor) | float > ambient_light_high_value }}"
+        - "{{ lights_on }}"
+        - "{{ not manual_override }}"
+        - "{{ ambient_light_options == 'ambient_light_option_disabled' }}"
+      sequence:
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        - service: homeassistant.turn_off
+          target:
+            entity_id: "{{ light_switch.entity_id }}"
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} AUTO: Turned OFF - Ambient light above threshold."
+    
+    # Light should turn off due to time settings
+    - conditions:
+        - "{{ include_time == 'time_enabled' }}"
+        - "{{ now().strftime('%H:%M:%S') == before_time }}"
+        - "{{ lights_on }}"
+        - "{{ not manual_override }}"
+      sequence:
+        - service: input_boolean.turn_on
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ light_auto_on_helper }}"
+        - service: input_text.set_value
+          target:
+            entity_id: "{{ last_automation_action_helper }}"
+          data:
+            value: "{{ now().isoformat() }}"
+        - service: homeassistant.turn_off
+          target:
+            entity_id: "{{ light_switch.entity_id }}"
+        - delay:
+            milliseconds: 1500
+        - service: input_boolean.turn_off
+          target:
+            entity_id: "{{ automation_active_helper }}"
+        - choose:
+          - conditions:
+              - "{{ include_logging }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} AUTO: Turned OFF - Time limit reached."
   
-  # Final logging
+  # FINAL LOGGING
   - choose:
     - conditions:
         - "{{ include_logging }}"
