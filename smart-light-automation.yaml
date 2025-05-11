@@ -32,7 +32,6 @@ blueprint:
     # TRIGGER SETTINGS
     trigger:
       name: "Trigger *"
-      icon: mdi:cog-outline
       description: "Binary sensors or schedules to trigger the automation."
       default: []
       selector:
@@ -46,7 +45,6 @@ blueprint:
     # LIGHTS SETTINGS
     lights_settings:
       name: "Lights *"
-      icon: mdi:lightbulb-outline
       description: "The lights, switches, scenes, and scripts to control."
       default: []
       selector:
