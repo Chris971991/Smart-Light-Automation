@@ -181,13 +181,13 @@ blueprint:
     natural_light_sensor:
       name: Natural Light Sensor (Optional)
       description: >
-        OPTIONAL dedicated sensor that only measures natural light. Leave blank to disable
-        natural light auto-off feature. This separate sensor to your internal illuminance sensor should be positioned to measure only outdoor 
-        light levels (e.g., facing a window, shielded from indoor lights).
-      default: ''
+        Separate sensor that only measures natural light. This is OPTIONAL - leave empty to disable
+        the natural light auto-off feature. This separate sensor to your internal illuminance sensor 
+        should be positioned to measure only outdoor light levels (e.g., facing a window, 
+        shielded from indoor lights).
       selector:
         entity:
-          domain: sensor   
+          domain: sensor  
     auto_off_with_natural_light:
       name: Enable Natural Light Auto-Off
       description: >
