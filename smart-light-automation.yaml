@@ -157,11 +157,11 @@ blueprint:
       default: 70
       selector:
         number:
-          min: 20
+          min: 5
           max: 500
           unit_of_measurement: lux
           mode: slider
-          step: 5
+          step: 1
     extremely_dark_threshold:
       name: Extremely Dark Threshold
       description: >
