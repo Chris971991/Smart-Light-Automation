@@ -186,13 +186,9 @@ blueprint:
         should be positioned to measure only outdoor light levels (e.g., facing a window, 
         shielded from indoor lights).
       selector:
-        select:
-          options:
-            - label: "None (Disabled)"
-              value: ""
-          custom_value: true
-          mode: dropdown
-      default: ""
+        entity:
+          domain: sensor
+      default: {}
     auto_off_with_natural_light:
       name: Enable Natural Light Auto-Off
       description: >
