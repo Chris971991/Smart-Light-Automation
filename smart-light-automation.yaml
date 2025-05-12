@@ -17,6 +17,8 @@ blueprint:
     • **Bright Room Logic** - Clears overrides when you turn off lights in well-lit rooms
     
     • **Timeout Protection** - Clears overrides after configurable timeout or room vacancy
+    
+    • **Natural Light Detection** - Turns lights off when natural light is sufficient, even with occupancy
 
     ## Compatible Sensors
 
@@ -176,6 +178,39 @@ blueprint:
           unit_of_measurement: lux
           mode: slider
           step: 0.5
+    auto_off_with_natural_light:
+      name: Enable Natural Light Auto-Off
+      description: >
+        When enabled, lights will turn off automatically when natural light 
+        exceeds the brightness threshold, even if someone is present in the room.
+        This saves energy by only using artificial lighting when necessary.
+      default: false
+      selector:
+        boolean:
+    natural_light_high_threshold:
+      name: Natural Light High Threshold
+      description: >
+        Lux threshold at which lights will turn off even with presence in the room.
+        When illuminance exceeds this value, the system assumes there's enough natural light 
+        and turns off artificial lighting to save energy. Usually 70-150 lux.
+      default: 100
+      selector:
+        number:
+          min: 50
+          max: 500
+          unit_of_measurement: lux
+          mode: slider
+          step: 10
+    sensor_affected_by_lights:
+      name: Illuminance Sensor Affected By Lights
+      description: >
+        Choose whether your illuminance sensor readings are affected by the artificial lights.
+        Select YES if your sensor readings increase when your lights turn on.
+        Select NO if your sensor only measures natural light (e.g., positioned to only 
+        detect outside light or shielded from artificial lighting).
+      default: false
+      selector:
+        boolean:
     sensor_off_latency_input:
       name: Sensor Off Latency Entity (Optional)
       description: >
@@ -258,6 +293,9 @@ variables:
   dark_threshold: !input dark_threshold
   bright_threshold: !input bright_threshold
   extremely_dark_threshold: !input extremely_dark_threshold
+  auto_off_with_natural_light: !input auto_off_with_natural_light
+  natural_light_high_threshold: !input natural_light_high_threshold
+  sensor_affected_by_lights: !input sensor_affected_by_lights
   override_timeout_hours: !input override_timeout_hours
   enable_debug_logs: !input enable_debug_logs
   sensor_off_latency_entity: !input sensor_off_latency_input
@@ -275,6 +313,7 @@ variables:
   is_dark: "{{ illuminance < dark_threshold }}"
   is_bright: "{{ illuminance > bright_threshold }}"
   is_extremely_dark: "{{ illuminance < extremely_dark_threshold }}"
+  is_naturally_bright: "{{ illuminance > natural_light_high_threshold }}"
   pir_active: "{{ is_state(presence_pir_sensor, 'on') }}"
   mmwave_active: "{{ is_state(presence_mmwave_sensor, 'on') }}"
   someone_present: "{{ pir_active or mmwave_active }}"
@@ -312,6 +351,18 @@ variables:
       {% set timestamp = states(last_automation_action_helper).split('+')[0] %}
       {% set time_diff = (now().replace(tzinfo=None) - strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() %}
       {{ time_diff < 3.0 and time_diff > 0 }}
+    {% else %}
+      false
+    {% endif %}
+  # Natural light condition: lights on, someone present, and enough natural light
+  # Skip if sensor is affected by lights (to prevent cycling)
+  turn_off_due_to_natural_light: >-
+    {% if auto_off_with_natural_light %}
+      {% if not sensor_affected_by_lights %}
+        {{ lights_on and someone_present and is_naturally_bright and is_state(light_auto_on_helper, 'on') }}
+      {% else %}
+        false
+      {% endif %}
     {% else %}
       false
     {% endif %}
@@ -730,6 +781,63 @@ action:
                     time_since_mmwave_change={{ (now() -
                     states[presence_mmwave_sensor].last_changed).total_seconds()
                     }}s, vacancy_timeout_seconds={{ vacancy_timeout_minutes * 60 }}s
+
+      # NEW CONDITION: Turn off lights when natural light is sufficient
+      - conditions:
+          - condition: template
+            value_template: "{{ turn_off_due_to_natural_light }}"
+          - condition: template
+            value_template: "{{ not manual_override }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} NATURAL LIGHT AUTO-OFF CONDITIONS MET:
+                    lights_on={{ lights_on }}, someone_present={{ someone_present }},
+                    is_naturally_bright={{ is_naturally_bright }}, illuminance={{ illuminance }},
+                    natural_light_high_threshold={{ natural_light_high_threshold }}
+          - service: input_boolean.turn_on
+            target:
+              entity_id: "{{ automation_active_helper }}"
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ light_auto_on_helper }}"
+          - service: input_text.set_value
+            target:
+              entity_id: "{{ last_automation_action_helper }}"
+            data:
+              value: "{{ now().isoformat() }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ light_switch.startswith('light.') }}"
+                sequence:
+                  - service: light.turn_off
+                    target:
+                      entity_id: "{{ light_switch }}"
+            default:
+              - service: switch.turn_off
+                target:
+                  entity_id: "{{ light_switch }}"
+          - delay:
+              milliseconds: 1500
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ automation_active_helper }}"
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} AUTO: Turned OFF - Sufficient natural light detected.
 
       # Automatically turn on lights when dark and someone present
       - conditions:
