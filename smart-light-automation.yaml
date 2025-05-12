@@ -1,19 +1,34 @@
 blueprint:
   name: Smart Presence Lighting Control
   description: >
-    Smartly manages lighting by adapting to presence, room darkness, and manual
-    adjustments. Designed for use with EPO (Everything Presence One) sensors or
-    similar devices providing occupancy detection and illuminance sensing.
+    # Smart Presence Lighting Control
+
+    Intelligently manages your lighting based on room occupancy, light levels, and manual controls.
+    Works with any combination of motion sensors, occupancy sensors, and illuminance sensors.
+
+    ## Features
+
+    • **Automatic Control** - Turns lights on when dark and someone is present
     
-    ### Features:
-    • Turn lights on automatically when dark and someone is present
-    • Turn lights off when room is vacant for a configurable time
-    • Respect manual overrides when you control lights
-    • Intelligently clear overrides when you manually turn off lights in bright rooms
-    • Maintain overrides when you manually override the automation's behavior
-    • Clear overrides after configurable timeout or room vacancy
+    • **Energy Saving** - Turns lights off when room is vacant for a configurable time
     
-    ### REQUIRED SETUP:
+    • **Smart Overrides** - Respects when you manually control lights
+    
+    • **Bright Room Logic** - Clears overrides when you turn off lights in well-lit rooms
+    
+    • **Timeout Protection** - Clears overrides after configurable timeout or room vacancy
+
+    ## Compatible Sensors
+
+    This blueprint works with:
+    • Everything Presence One/Light sensors
+    • Standard motion/PIR sensors
+    • mmWave/radar presence sensors
+    • Any illuminance/light level sensor
+    • Or combinations of these sensors
+    
+    ## REQUIRED SETUP
+
     Before using this blueprint, you MUST create these helper entities:
     
     1. `input_boolean.[room_name]_automation_active`
@@ -42,16 +57,19 @@ blueprint:
     presence_pir_sensor:
       name: PIR Motion Sensor
       description: >
-        PIR (Passive Infrared) motion sensor entity that detects immediate movement.
-        For EPO sensors, this is typically binary_sensor.everything_presence_one_ROOM_pir.
+        Motion sensor that detects immediate movement. This can be any PIR/motion sensor.
+        For Everything Presence devices, use binary_sensor.everything_presence_xxx_pir.
+        For standard motion sensors, use your motion sensor entity.
       selector:
         entity:
           domain: binary_sensor
     presence_mmwave_sensor:
-      name: mmWave Occupancy Sensor
+      name: Occupancy Sensor (Optional)
       description: >
-        Millimeter-wave radar occupancy sensor that can detect presence even without movement.
-        For EPO sensors, this is typically binary_sensor.everything_presence_one_ROOM_occupancy.
+        Secondary occupancy sensor that can detect presence even without movement.
+        If you only have one motion sensor, you can select the same entity again.
+        For Everything Presence devices, use binary_sensor.everything_presence_xxx_occupancy.
+        For mmWave/radar sensors, use your occupancy entity.
       selector:
         entity:
           domain: binary_sensor
@@ -59,8 +77,9 @@ blueprint:
       name: Illuminance Sensor
       description: >
         Sensor that measures room brightness in lux (lumens per square meter).
-        For EPO sensors, this is typically sensor.everything_presence_one_ROOM_illuminance.
-        This reading is used with thresholds to determine when to turn lights on/off.
+        For Everything Presence devices, use sensor.everything_presence_xxx_illuminance.
+        For other light sensors, select any sensor that provides light level readings.
+        If you don't have a light sensor, create an input_number helper and adjust manually.
       selector:
         entity:
           domain: sensor
@@ -160,10 +179,10 @@ blueprint:
     sensor_off_latency_input:
       name: Sensor Off Latency Entity (Optional)
       description: >
-        Entity that provides the sensor's off latency value in seconds.
-        For EPO sensors, this is typically number.everything_presence_one_ROOM_occupancy_off_latency.
-        This entity provides a dynamic value that can be changed from the EPO app.
-        Leave blank to use the fixed latency value below instead.
+        Entity that provides the sensor's off latency/timeout value in seconds.
+        For Everything Presence devices, use number.everything_presence_xxx_occupancy_off_latency.
+        For other sensors, you can leave this blank and use the fixed value below.
+        This is only needed if you want to dynamically adjust latency from another UI.
       default: number.everything_presence_one_{{ input.room_name }}_occupancy_off_latency
       selector:
         entity:
