@@ -187,7 +187,7 @@ blueprint:
       default: ''
       selector:
         entity:
-          domain: sensor     
+          domain: sensor   
     auto_off_with_natural_light:
       name: Enable Natural Light Auto-Off
       description: >
