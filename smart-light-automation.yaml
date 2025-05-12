@@ -187,8 +187,7 @@ blueprint:
         shielded from indoor lights).
       selector:
         entity:
-          domain: binary_sensor
-      default: {}
+          domain: sensor
     auto_off_with_natural_light:
       name: Enable Natural Light Auto-Off
       description: >
