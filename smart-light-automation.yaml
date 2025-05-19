@@ -556,51 +556,6 @@ action:
                         {{ room_name | upper }} USER TOGGLE: Likely automation
                         action, light_auto_on_helper preserved.
           - choose:
-              # NEW CONDITION TO CLEAR OVERRIDE WHEN TURNING OFF LIGHTS IN BRIGHT ROOM
-              - conditions:
-                  - condition: template
-                    value_template: "{{ user_turned_off and is_bright and someone_present }}"
-                  - condition: template
-                    value_template: "{{ automation_inactive }}"
-                  - condition: template
-                    value_template: >-
-                      {{ (now() -
-                      states[automation_active_helper].last_changed).total_seconds()
-                      > 2.0 }}
-                sequence:
-                  - if:
-                      - condition: template
-                        value_template: "{{ enable_debug_logs }}"
-                    then:
-                      - service: system_log.write
-                        data:
-                          level: debug
-                          message: >-
-                            {{ room_name | upper }} OVERRIDE CONDITION SET 4 MET:
-                            user_turned_off AND is_bright AND someone_present AND
-                            automation_inactive
-                  - service: input_boolean.turn_off
-                    target:
-                      entity_id: "{{ manual_override_helper }}"
-                  - delay:
-                      milliseconds: 100
-                  - if:
-                      - condition: template
-                        value_template: "{{ enable_debug_logs }}"
-                    then:
-                      - service: system_log.write
-                        data:
-                          level: info
-                          message: >-
-                            {{ room_name | upper }} MANUAL OVERRIDE AFTER SET 4:
-                            Helper state is now {{ is_state(manual_override_helper,
-                            'on') }}
-                      - service: system_log.write
-                        data:
-                          level: info
-                          message: >-
-                            {{ room_name | upper }} MANUAL OVERRIDE: Cleared, user turned off 
-                            lights in bright room.
               - conditions:
                   - condition: template
                     value_template: "{{ user_turned_on }}"
@@ -650,7 +605,6 @@ action:
                           message: >-
                             {{ room_name | upper }} MANUAL OVERRIDE: User turned
                             lights ON. Setting override.
-              # Modified SET 2 - Only apply override for non-bright rooms
               - conditions:
                   - condition: template
                     value_template: "{{ user_turned_off }}"
@@ -747,6 +701,51 @@ action:
                           message: >-
                             {{ room_name | upper }} MANUAL OVERRIDE: Cleared, user
                             action agrees.
+              # NEW CONDITION TO CLEAR OVERRIDE WHEN TURNING OFF LIGHTS IN BRIGHT ROOM
+              - conditions:
+                  - condition: template
+                    value_template: "{{ user_turned_off and is_bright and someone_present }}"
+                  - condition: template
+                    value_template: "{{ automation_inactive }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (now() -
+                      states[automation_active_helper].last_changed).total_seconds()
+                      > 2.0 }}
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: debug
+                          message: >-
+                            {{ room_name | upper }} OVERRIDE CONDITION SET 4 MET:
+                            user_turned_off AND is_bright AND someone_present AND
+                            automation_inactive
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ manual_override_helper }}"
+                  - delay:
+                      milliseconds: 100
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE AFTER SET 4:
+                            Helper state is now {{ is_state(manual_override_helper,
+                            'on') }}
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE: Cleared, user turned off 
+                            lights in bright room.
             default:
               - if:
                   - condition: template
