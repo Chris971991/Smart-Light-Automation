@@ -17,8 +17,6 @@ blueprint:
     • **Bright Room Logic** - Clears overrides when you turn off lights in well-lit rooms
     
     • **Timeout Protection** - Clears overrides after configurable timeout or room vacancy
-    
-    • **Natural Light Detection** - Turns lights off when natural light is sufficient, even with occupancy. **REQUIRES SECONDARY ILLUMINANCE SENSOR**
 
     ## Compatible Sensors
 
@@ -178,49 +176,6 @@ blueprint:
           unit_of_measurement: lux
           mode: slider
           step: 0.5
-    natural_light_sensor:
-      name: Natural Light Sensor (Optional)
-      description: >
-        Separate sensor that only measures natural light. This is OPTIONAL - leave empty to disable
-        the natural light auto-off feature. This separate sensor to your internal illuminance sensor 
-        should be positioned to measure only outdoor light levels (e.g., facing a window, 
-        shielded from indoor lights).
-      selector:
-        entity:
-          domain: sensor
-    auto_off_with_natural_light:
-      name: Enable Natural Light Auto-Off
-      description: >
-        When enabled, lights will turn off automatically when natural light 
-        exceeds the brightness threshold, even if someone is present in the room.
-        This saves energy by only using artificial lighting when necessary. **Requires Secondary Illuminance Sensor to work.**
-      default: false
-      selector:
-        boolean:
-    natural_light_high_threshold:
-      name: Natural Light High Threshold
-      description: >
-        Lux threshold at which lights will turn off even with presence in the room.
-        When illuminance exceeds this value, the system assumes there's enough natural light 
-        and turns off artificial lighting to save energy. Usually 70-150 lux.
-      default: 100
-      selector:
-        number:
-          min: 5
-          max: 500
-          unit_of_measurement: lux
-          mode: slider
-          step: 1
-    sensor_affected_by_lights:
-      name: Illuminance Sensor Affected By Lights
-      description: >
-        Choose whether your illuminance sensor readings are affected by the artificial lights.
-        Select YES if your sensor readings increase when your lights turn on.
-        Select NO if your sensor only measures natural light (e.g., positioned to only 
-        detect outside light or shielded from artificial lighting).
-      default: false
-      selector:
-        boolean:
     sensor_off_latency_input:
       name: Sensor Off Latency Entity (Optional)
       description: >
@@ -295,7 +250,6 @@ variables:
   presence_pir_sensor: !input presence_pir_sensor
   presence_mmwave_sensor: !input presence_mmwave_sensor
   illuminance_sensor: !input illuminance_sensor
-  natural_light_sensor: !input natural_light_sensor
   light_switch: !input light_switch
   automation_active_helper: !input automation_active_helper
   manual_override_helper: !input manual_override_helper
@@ -304,9 +258,6 @@ variables:
   dark_threshold: !input dark_threshold
   bright_threshold: !input bright_threshold
   extremely_dark_threshold: !input extremely_dark_threshold
-  auto_off_with_natural_light: !input auto_off_with_natural_light
-  natural_light_high_threshold: !input natural_light_high_threshold
-  sensor_affected_by_lights: !input sensor_affected_by_lights
   override_timeout_hours: !input override_timeout_hours
   enable_debug_logs: !input enable_debug_logs
   sensor_off_latency_entity: !input sensor_off_latency_input
@@ -321,22 +272,9 @@ variables:
   vacancy_timeout_minutes: >-
     {{ ([((sensor_off_latency_seconds * vacancy_timeout_multiplier) / 60) | round(0, 'ceil'), 1] | max) | int(5) }}
   illuminance: "{{ states(illuminance_sensor)|float(0) }}"
-  natural_light_available: "{{ natural_light_sensor is defined and natural_light_sensor != '' }}"
-  natural_light_level: >-
-    {% if natural_light_available %}
-      {{ states(natural_light_sensor)|float(0) }}
-    {% else %}
-      0
-    {% endif %}
   is_dark: "{{ illuminance < dark_threshold }}"
   is_bright: "{{ illuminance > bright_threshold }}"
   is_extremely_dark: "{{ illuminance < extremely_dark_threshold }}"
-  is_naturally_bright: >-
-    {% if natural_light_available %}
-      {{ natural_light_level > natural_light_high_threshold }}
-    {% else %}
-      false
-    {% endif %}
   pir_active: "{{ is_state(presence_pir_sensor, 'on') }}"
   mmwave_active: "{{ is_state(presence_mmwave_sensor, 'on') }}"
   someone_present: "{{ pir_active or mmwave_active }}"
@@ -377,18 +315,6 @@ variables:
     {% else %}
       false
     {% endif %}
-  # Natural light condition: lights on, someone present, and enough natural light
-  # Skip if sensor is affected by lights (to prevent cycling)
-  turn_off_due_to_natural_light: >-
-    {% if auto_off_with_natural_light and natural_light_available %}
-      {% if not sensor_affected_by_lights or natural_light_available %}
-        {{ lights_on and someone_present and is_naturally_bright and is_state(light_auto_on_helper, 'on') }}
-      {% else %}
-        false
-      {% endif %}
-    {% else %}
-      false
-    {% endif %}
   auto_would_turn_on_intent: "{{ (is_dark or is_extremely_dark) and someone_present }}"
   auto_would_turn_off_intent: "{{ not someone_present }}"
   auto_would_preserve_state_intent: >-
@@ -400,7 +326,6 @@ trigger:
       - !input presence_pir_sensor
       - !input presence_mmwave_sensor 
       - !input illuminance_sensor
-      - !input natural_light_sensor
       - !input light_switch
       - sun.sun
       - !input sensor_off_latency_input
@@ -449,14 +374,6 @@ action:
             user_toggled_lights }},  automation_initiated_change={{
             automation_initiated_change }}, time_since_last_automation={{
             time_since_last_automation }}s
-      - service: system_log.write
-        data:
-          level: info
-          message: >-
-            {{ room_name | upper }} NATURAL LIGHT DEBUG: natural_light_available={{
-            natural_light_available }}, natural_light_level={{ natural_light_level }}, 
-            is_naturally_bright={{ is_naturally_bright }}, turn_off_due_to_natural_light={{ 
-            turn_off_due_to_natural_light }}
 
   # Handle manual user actions
   - choose:
@@ -556,6 +473,52 @@ action:
                         {{ room_name | upper }} USER TOGGLE: Likely automation
                         action, light_auto_on_helper preserved.
           - choose:
+              # First condition - matches working automation order - Check for user turning off lights in bright room
+              - conditions:
+                  - condition: template
+                    value_template: "{{ user_turned_off and is_bright and someone_present }}"
+                  - condition: template
+                    value_template: "{{ automation_inactive }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (now() -
+                      states[automation_active_helper].last_changed).total_seconds()
+                      > 2.0 }}
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: debug
+                          message: >-
+                            {{ room_name | upper }} OVERRIDE CONDITION SET 4 MET:
+                            user_turned_off AND is_bright AND someone_present AND
+                            automation_inactive
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ manual_override_helper }}"
+                  - delay:
+                      milliseconds: 100
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE AFTER SET 4:
+                            Helper state is now {{ is_state(manual_override_helper,
+                            'on') }}
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE: Cleared, user turned off 
+                            lights in bright room.
+              # Condition for user turning on lights
               - conditions:
                   - condition: template
                     value_template: "{{ user_turned_on }}"
@@ -605,6 +568,7 @@ action:
                           message: >-
                             {{ room_name | upper }} MANUAL OVERRIDE: User turned
                             lights ON. Setting override.
+              # Condition for user turning off lights in non-bright conditions
               - conditions:
                   - condition: template
                     value_template: "{{ user_turned_off }}"
@@ -654,6 +618,7 @@ action:
                           message: >-
                             {{ room_name | upper }} MANUAL OVERRIDE: User turned
                             lights OFF. Setting override.
+              # Condition for when user action agrees with automation intent
               - conditions:
                   - condition: template
                     value_template: >-
@@ -701,7 +666,7 @@ action:
                           message: >-
                             {{ room_name | upper }} MANUAL OVERRIDE: Cleared, user
                             action agrees.
-              # NEW CONDITION TO CLEAR OVERRIDE WHEN TURNING OFF LIGHTS IN BRIGHT ROOM
+              # Duplicate condition for bright room, to match working automation
               - conditions:
                   - condition: template
                     value_template: "{{ user_turned_off and is_bright and someone_present }}"
@@ -812,63 +777,6 @@ action:
                     time_since_mmwave_change={{ (now() -
                     states[presence_mmwave_sensor].last_changed).total_seconds()
                     }}s, vacancy_timeout_seconds={{ vacancy_timeout_minutes * 60 }}s
-
-      # NEW CONDITION: Turn off lights when natural light is sufficient
-      - conditions:
-          - condition: template
-            value_template: "{{ turn_off_due_to_natural_light }}"
-          - condition: template
-            value_template: "{{ not manual_override }}"
-        sequence:
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: >-
-                    {{ room_name | upper }} NATURAL LIGHT AUTO-OFF CONDITIONS MET:
-                    lights_on={{ lights_on }}, someone_present={{ someone_present }},
-                    is_naturally_bright={{ is_naturally_bright }}, natural_light_level={{ natural_light_level }},
-                    natural_light_high_threshold={{ natural_light_high_threshold }}
-          - service: input_boolean.turn_on
-            target:
-              entity_id: "{{ automation_active_helper }}"
-          - service: input_boolean.turn_off
-            target:
-              entity_id: "{{ light_auto_on_helper }}"
-          - service: input_text.set_value
-            target:
-              entity_id: "{{ last_automation_action_helper }}"
-            data:
-              value: "{{ now().isoformat() }}"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ light_switch.startswith('light.') }}"
-                sequence:
-                  - service: light.turn_off
-                    target:
-                      entity_id: "{{ light_switch }}"
-            default:
-              - service: switch.turn_off
-                target:
-                  entity_id: "{{ light_switch }}"
-          - delay:
-              milliseconds: 1500
-          - service: input_boolean.turn_off
-            target:
-              entity_id: "{{ automation_active_helper }}"
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: >-
-                    {{ room_name | upper }} AUTO: Turned OFF - Sufficient natural light detected.
 
       # Automatically turn on lights when dark and someone present
       - conditions:
