@@ -297,7 +297,7 @@ variables:
   is_daytime: "{{ sun_state == 'above_horizon' }}"
   is_nighttime: "{{ sun_state == 'below_horizon' }}"
   light_change_time: "{{ (now() - states[light_switch].last_changed).total_seconds() }}"
-  light_recently_changed: "{{ light_change_time < 10 }}"
+  light_recently_changed: "{{ light_change_time < 3 }}"
   time_since_last_automation: >-
     {% if states(last_automation_action_helper) != 'unknown' and
     states(last_automation_action_helper) != '' %}
@@ -788,8 +788,12 @@ action:
             value_template: "{{ not lights_on }}"
           - condition: template
             value_template: "{{ not manual_override }}"
-          - condition: template
-            value_template: "{{ not light_recently_changed }}"
+          - condition: or
+            conditions:
+              - condition: template
+                value_template: "{{ not light_recently_changed }}"
+              - condition: template
+                value_template: "{{ light_recently_changed and (now() - states[presence_pir_sensor].last_changed).total_seconds() < 2 }}"
         sequence:
           - if:
               - condition: template
