@@ -43,7 +43,7 @@ blueprint:
     4. `input_text.[room_name]_last_automation_action`
        Stores timestamp of last automation action
     
-    Replace [room_name] with your actual room name (office, bedroom, etc.)
+    Replace [room_name] with your actual room name (office, bedroom, etc.) Ree
 
   domain: automation
   input:
