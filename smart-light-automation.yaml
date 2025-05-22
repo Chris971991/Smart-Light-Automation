@@ -368,10 +368,17 @@ variables:
     {% if someone_present %}
       false
     {% else %}
-      {% set pir_vacant_time = (now() - states[presence_pir_sensor].last_changed).total_seconds() %}
-      {% set mmwave_vacant_time = (now() - states[mmwave_sensor].last_changed).total_seconds() %}
-      {% set required_time = vacancy_timeout_minutes * 60 %}
-      {{ pir_vacant_time > required_time and mmwave_vacant_time > required_time }}
+      {% set current_time = now().timestamp() %}
+      {% set pir_changed = as_timestamp(states[presence_pir_sensor].last_changed) %}
+      {% set mmwave_changed = as_timestamp(states[mmwave_sensor].last_changed) %}
+      {% if pir_changed is none or mmwave_changed is none %}
+        false
+      {% else %}
+        {% set pir_vacant_time = current_time - pir_changed %}
+        {% set mmwave_vacant_time = current_time - mmwave_changed %}
+        {% set required_time = vacancy_timeout_minutes * 60 %}
+        {{ pir_vacant_time > required_time and mmwave_vacant_time > required_time }}
+      {% endif %}
     {% endif %}
   
   # Light state
@@ -426,11 +433,12 @@ variables:
         {% if last_action in ['unknown', 'unavailable', '', None] %}
           true
         {% else %}
-          {% set parsed_time = as_datetime(last_action) %}
-          {% if parsed_time is none %}
+          {% set current_time = now().timestamp() %}
+          {% set action_time = as_timestamp(last_action) %}
+          {% if action_time is none %}
             true
           {% else %}
-            {% set time_since = (now() - parsed_time).total_seconds() %}
+            {% set time_since = current_time - action_time %}
             {{ time_since > 2 }}
           {% endif %}
         {% endif %}
@@ -473,9 +481,14 @@ variables:
     {% if not manual_override %}
       false
     {% else %}
-      {% set override_time = states[manual_override_helper].last_changed %}
-      {% set hours_active = (now() - override_time).total_seconds() / 3600 %}
-      {{ hours_active > override_timeout_hours }}
+      {% set current_time = now().timestamp() %}
+      {% set override_changed = as_timestamp(states[manual_override_helper].last_changed) %}
+      {% if override_changed is none %}
+        false
+      {% else %}
+        {% set hours_active = (current_time - override_changed) / 3600 %}
+        {{ hours_active > override_timeout_hours }}
+      {% endif %}
     {% endif %}
 
 # Triggers
@@ -601,6 +614,19 @@ action:
           - condition: template
             value_template: "{{ is_manual_change and is_light_change }}"
         sequence:
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    [{{ room_name | upper }}] MANUAL CHANGE DETECTED: 
+                    user_turned_{{ 'on' if user_turned_on else 'off' if user_turned_off else 'unknown' }}
+                    | automation_active={{ automation_active }}
+                    | last_action={{ states(last_automation_action_helper) }}
+          
           # Process manual override logic
           - choose:
               # User turned off lights in bright room while present - clear override
@@ -662,6 +688,10 @@ action:
           - service: input_boolean.turn_off
             target:
               entity_id: "{{ light_auto_on_helper }}"
+          
+          # Small delay to ensure state is settled
+          - delay:
+              milliseconds: 200
 
       # Clear overrides on timeout or vacancy
       - conditions:
@@ -711,8 +741,14 @@ action:
               {% if last_trigger is none %}
                 true
               {% else %}
-                {% set time_since = (now() - as_datetime(last_trigger)).total_seconds() %}
-                {{ time_since > 5 }}
+                {% set current_time = now().timestamp() %}
+                {% set trigger_time = as_timestamp(last_trigger) %}
+                {% if trigger_time is none %}
+                  true
+                {% else %}
+                  {% set time_since = current_time - trigger_time %}
+                  {{ time_since > 5 }}
+                {% endif %}
               {% endif %}
           - service: automation.trigger
             target:
