@@ -369,7 +369,7 @@ variables:
   is_extremely_dark: "{{ illuminance < extremely_dark_threshold }}"
   pir_active: "{{ is_state(presence_pir_sensor, 'on') }}"
   mmwave_active: "{{ is_state(presence_mmwave_sensor, 'on') }}"
-  someone_present: "{{ pir_active or mmwave_active or bed_occupied }}"
+  someone_present: "{{ pir_active or mmwave_active }}"
   # Bed sensor variables
   active_bed_sensor: >-
     {% if enable_bed_sensor %}
@@ -412,16 +412,9 @@ variables:
       false
     {% endif %}
   vacant_for_timeout: |-
-    {% set motion_vacant = not (pir_active or mmwave_active) and
+    {{ not someone_present and
       (now() - states[presence_pir_sensor].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) and
-      (now() - states[presence_mmwave_sensor].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) %}
-    {% if enable_bed_sensor and bed_sensor_available %}
-      {% set bed_vacant = not bed_occupied and
-        (now() - states[active_bed_sensor].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) %}
-      {{ motion_vacant and bed_vacant }}
-    {% else %}
-      {{ motion_vacant }}
-    {% endif %}
+      (now() - states[presence_mmwave_sensor].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) }}
   lights_on: "{{ is_state(light_switch, 'on') }}"
   user_toggled_lights: "{{ trigger.platform == 'state' and trigger.entity_id == light_switch }}"
   user_turned_on: "{{ user_toggled_lights and trigger.to_state.state == 'on' }}"
@@ -698,6 +691,63 @@ action:
                   level: info
                   message: >-
                     {{ room_name | upper }} MANUAL OVERRIDE: Skipping auto actions.
+
+      # Automatically turn off lights when someone gets into bed
+      - conditions:
+          - condition: template
+            value_template: "{{ bed_occupied }}"
+          - condition: template
+            value_template: "{{ lights_on }}"
+          - condition: template
+            value_template: "{{ not manual_override }}"
+          - condition: template
+            value_template: "{{ enable_bed_sensor and bed_sensor_available }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} BED OCCUPIED AUTO-OFF: Someone got into bed, turning off lights
+          - service: input_boolean.turn_on
+            target:
+              entity_id: "{{ automation_active_helper }}"
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ light_auto_on_helper }}"
+          - service: input_text.set_value
+            target:
+              entity_id: "{{ last_automation_action_helper }}"
+            data:
+              value: "{{ now().isoformat() }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ light_switch.startswith('light.') }}"
+                sequence:
+                  - service: light.turn_off
+                    target:
+                      entity_id: "{{ light_switch }}"
+            default:
+              - service: switch.turn_off
+                target:
+                  entity_id: "{{ light_switch }}"
+          - delay:
+              milliseconds: 1500
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ automation_active_helper }}"
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "{{ room_name | upper }} AUTO: Turned OFF - Someone got into bed."
 
       # Automatically turn on lights when dark and someone present (with bed sensor logic)
       - conditions:
