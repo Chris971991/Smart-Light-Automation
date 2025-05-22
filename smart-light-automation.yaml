@@ -35,32 +35,43 @@ blueprint:
     
     ## REQUIRED HELPER ENTITIES
 
-    Before using this blueprint, you MUST create these helper entities:
+    Before using this blueprint, you MUST create these helper entities.
+    
+    **IMPORTANT**: All entity IDs must be lowercase! If your room name is "Office", 
+    the helpers should use "office" (lowercase) in their entity IDs.
     
     1. `input_boolean.[room_name]_automation_active`
        - Tracks when automation is running an action
+       - Example: input_boolean.office_automation_active
     
     2. `input_boolean.[room_name]_manual_override`
        - Tracks when user has manually overridden automation
+       - Example: input_boolean.office_manual_override
     
     3. `input_boolean.[room_name]_light_auto_on`
        - Tracks if light was automatically turned on
+       - Example: input_boolean.office_light_auto_on
     
     4. `input_datetime.[room_name]_last_automation_action`
        - Stores timestamp of last automation action
        - MUST have both date AND time enabled
+       - Example: input_datetime.office_last_automation_action
     
     5. `input_boolean.[room_name]_occupancy_state`
        - Tracks combined occupancy state from all sensors
+       - Example: input_boolean.office_occupancy_state
     
-    Replace [room_name] with your actual room name (e.g., office, bedroom)
+    Replace [room_name] with your actual room name in LOWERCASE (e.g., office, bedroom, living_room)
     
     ## Migration Note
     
-    If upgrading from the previous version, you'll need to:
+    If upgrading from the previous version:
     1. Delete your old `input_text.[room_name]_last_automation_action` helper
     2. Create a new `input_datetime.[room_name]_last_automation_action` helper with both date and time
     3. Create the new `input_boolean.[room_name]_occupancy_state` helper
+    
+    **IMPORTANT**: Ensure all helper entity IDs use lowercase room names!
+    If your room is "Office", helpers should be "office" (lowercase).
 
   domain: automation
   input:
@@ -68,7 +79,10 @@ blueprint:
       name: Room Name
       description: >
         Name of the room used throughout the automation for entity naming and logging.
-        This should be a simple name like 'office', 'bedroom', etc. Use underscores instead of spaces.
+        You can use any capitalization here (e.g., "Office", "Living Room"), but note that
+        all helper entity IDs will be created in lowercase. For example, if you enter "Office",
+        the helpers should be created as "input_boolean.office_automation_active", etc.
+        Use underscores instead of spaces for multi-word names (e.g., "living_room").
       selector:
         text:
     presence_pir_sensor:
@@ -276,12 +290,12 @@ variables:
   enable_transition_effects: !input enable_transition_effects
   transition_time_seconds: !input transition_time_seconds
   
-  # Helper entity names
-  automation_active_helper: "input_boolean.{{ room_name }}_automation_active"
-  manual_override_helper: "input_boolean.{{ room_name }}_manual_override"
-  light_auto_on_helper: "input_boolean.{{ room_name }}_light_auto_on"
-  last_automation_action_helper: "input_datetime.{{ room_name }}_last_automation_action"
-  occupancy_state_helper: "input_boolean.{{ room_name }}_occupancy_state"
+  # Helper entity names (forced to lowercase for Home Assistant compatibility)
+  automation_active_helper: "input_boolean.{{ room_name | lower }}_automation_active"
+  manual_override_helper: "input_boolean.{{ room_name | lower }}_manual_override"
+  light_auto_on_helper: "input_boolean.{{ room_name | lower }}_light_auto_on"
+  last_automation_action_helper: "input_datetime.{{ room_name | lower }}_last_automation_action"
+  occupancy_state_helper: "input_boolean.{{ room_name | lower }}_occupancy_state"
   
   # Use mmwave sensor if provided, otherwise use PIR sensor twice
   mmwave_sensor: >-
@@ -512,26 +526,45 @@ condition:
 
 # Actions
 action:
-  # Validate required helpers exist
-  - condition: template
-    value_template: >-
-      {% set helpers_valid = true %}
-      {% if states[automation_active_helper] is not defined %}
-        {% set helpers_valid = false %}
-      {% endif %}
-      {% if states[manual_override_helper] is not defined %}
-        {% set helpers_valid = false %}
-      {% endif %}
-      {% if states[light_auto_on_helper] is not defined %}
-        {% set helpers_valid = false %}
-      {% endif %}
-      {% if states[last_automation_action_helper] is not defined %}
-        {% set helpers_valid = false %}
-      {% endif %}
-      {% if states[occupancy_state_helper] is not defined %}
-        {% set helpers_valid = false %}
-      {% endif %}
-      {{ helpers_valid }}
+  # Check and notify about missing helpers
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {% set helpers_exist = true %}
+              {% if states[automation_active_helper] is not defined %}
+                {% set helpers_exist = false %}
+              {% elif states[manual_override_helper] is not defined %}
+                {% set helpers_exist = false %}
+              {% elif states[light_auto_on_helper] is not defined %}
+                {% set helpers_exist = false %}
+              {% elif states[last_automation_action_helper] is not defined %}
+                {% set helpers_exist = false %}
+              {% elif states[occupancy_state_helper] is not defined %}
+                {% set helpers_exist = false %}
+              {% endif %}
+              {{ not helpers_exist }}
+        sequence:
+          - service: persistent_notification.create
+            data:
+              title: "{{ room_name }} Lighting Automation Error"
+              message: >-
+                Missing required helper entities! Please create:
+                - {{ automation_active_helper }}
+                - {{ manual_override_helper }}
+                - {{ light_auto_on_helper }}
+                - {{ last_automation_action_helper }}
+                - {{ occupancy_state_helper }}
+                
+                Remember: All entity IDs must be lowercase!
+              notification_id: "{{ room_name }}_lighting_helper_error"
+          - stop: "Missing required helper entities"
+  
+  # Clear any previous error notifications
+  - service: persistent_notification.dismiss
+    data:
+      notification_id: "{{ room_name }}_lighting_helper_error"
+    continue_on_error: true
 
   # Debug logging - consolidated
   - if:
