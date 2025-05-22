@@ -47,7 +47,7 @@ blueprint:
        Stores timestamp of last automation action
     
     5. `input_boolean.[room_name]_bed_delay_active` (only if using bed sensor)
-       Tracks when bed delay timer is active
+       Tracks when bed delay timer is active - ONLY CREATE THIS FOR BEDROOMS
     
     Replace [room_name] with your actual room name (office, bedroom, etc.)
 
@@ -213,11 +213,13 @@ blueprint:
       description: >
         Helper entity that tracks when a bed delay timer is active.
         Only required if using bed sensor integration. You MUST create this
-        input_boolean entity if enabling bed sensor features.
-      default: input_boolean.{{ input.room_name }}_bed_delay_active
+        input_boolean entity ONLY if enabling bed sensor features.
+        Leave as default if not using bed sensors.
+      default: ""
       selector:
         entity:
           domain: input_boolean
+          multiple: false
     dark_threshold:
       name: Dark Threshold
       description: >
@@ -406,7 +408,7 @@ variables:
       false
     {% endif %}
   bed_delay_active: >-
-    {% if enable_bed_sensor %}
+    {% if enable_bed_sensor and bed_delay_helper != '' %}
       {{ is_state(bed_delay_helper, 'on') }}
     {% else %}
       false
@@ -430,7 +432,7 @@ variables:
   automation_inactive: "{{ is_state(automation_active_helper, 'off') }}"
   in_middle_range: "{{ not is_dark and not is_bright }}"
   hourly_check: "{{ trigger.platform == 'time_pattern' }}"
-  bed_delay_timeout: "{{ enable_bed_sensor and trigger.entity_id == bed_delay_helper and trigger.to_state.state == 'off' and trigger.from_state.state == 'on' }}"
+  bed_delay_timeout: "{{ enable_bed_sensor and bed_delay_helper != '' and trigger.entity_id == bed_delay_helper and trigger.to_state.state == 'off' and trigger.from_state.state == 'on' }}"
   override_timeout: |-
     {{ hourly_check and is_state(manual_override_helper, 'on') and
       (now() - states[manual_override_helper].last_changed).total_seconds() > (override_timeout_hours * 3600) }}
@@ -589,7 +591,7 @@ action:
           # Cancel any active bed delay when user manually controls lights
           - if:
               - condition: template
-                value_template: "{{ enable_bed_sensor and bed_delay_active }}"
+                value_template: "{{ enable_bed_sensor and bed_delay_helper != '' and bed_delay_active }}"
             then:
               - service: input_boolean.turn_off
                 target:
@@ -747,6 +749,8 @@ action:
               - conditions:
                   - condition: template
                     value_template: "{{ bed_should_delay_lights }}"
+                  - condition: template
+                    value_template: "{{ bed_delay_helper != '' }}"
                 sequence:
                   - if:
                       - condition: template
@@ -826,7 +830,7 @@ action:
           # Cancel any active bed delay when room becomes vacant
           - if:
               - condition: template
-                value_template: "{{ enable_bed_sensor and bed_delay_active }}"
+                value_template: "{{ enable_bed_sensor and bed_delay_helper != '' and bed_delay_active }}"
             then:
               - service: input_boolean.turn_off
                 target:
@@ -884,7 +888,7 @@ action:
           # Also clear bed delay if active
           - if:
               - condition: template
-                value_template: "{{ enable_bed_sensor and bed_delay_active }}"
+                value_template: "{{ enable_bed_sensor and bed_delay_helper != '' and bed_delay_active }}"
             then:
               - service: input_boolean.turn_off
                 target:
@@ -920,7 +924,7 @@ action:
           # Also clear bed delay if active
           - if:
               - condition: template
-                value_template: "{{ enable_bed_sensor and bed_delay_active }}"
+                value_template: "{{ enable_bed_sensor and bed_delay_helper != '' and bed_delay_active }}"
             then:
               - service: input_boolean.turn_off
                 target:
