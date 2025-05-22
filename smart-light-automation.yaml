@@ -411,6 +411,13 @@ variables:
     {% else %}
       false
     {% endif %}
+  # FIXED: Better bed sensor timing detection
+  bed_sensor_recently_triggered: >-
+    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
+      {{ (now() - states[active_bed_sensor].last_changed).total_seconds() < 3.0 }}
+    {% else %}
+      false
+    {% endif %}
   vacant_for_timeout: |-
     {{ not someone_present and
       (now() - states[presence_pir_sensor].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) and
@@ -554,14 +561,18 @@ action:
                 bed_became_occupied={{ bed_became_occupied }}, bed_became_unoccupied={{ bed_became_unoccupied }},
                 bed_should_delay={{ bed_should_delay_lights }}, bed_should_prevent={{ bed_should_prevent_lights }},
                 bed_delay_active={{ bed_delay_active }}, bed_sensor_available={{ bed_sensor_available }},
-                active_bed_sensor={{ active_bed_sensor }}, bed_delay_timeout={{ bed_delay_timeout }}
+                active_bed_sensor={{ active_bed_sensor }}, bed_delay_timeout={{ bed_delay_timeout }},
+                bed_sensor_recently_triggered={{ bed_sensor_recently_triggered }}
 
   # Handle manual user actions first (before automation logic)
   - choose:
       - conditions:
           - condition: template
             value_template: "{{ user_toggled_lights and not automation_initiated_change }}"
-          # Only skip manual action detection if bed sensor directly caused recent automation
+          # FIXED: Prevent bed sensor actions from being treated as manual
+          - condition: template
+            value_template: "{{ not bed_sensor_recently_triggered }}"
+          # Also check the existing logic
           - condition: template
             value_template: "{{ not bed_sensor_caused_recent_automation }}"
         sequence:
@@ -576,7 +587,8 @@ action:
                     {{ room_name | upper }} MANUAL ACTION DETECTED:
                     user_turned_on={{ user_turned_on }}, user_turned_off={{
                     user_turned_off }}, automation_initiated={{ automation_initiated_change }},
-                    time_since_last_automation={{ time_since_last_automation }}
+                    time_since_last_automation={{ time_since_last_automation }},
+                    bed_sensor_recently_triggered={{ bed_sensor_recently_triggered }}
           
           # Cancel any active bed delay when user manually controls lights
           - if:
@@ -672,6 +684,9 @@ action:
                           level: info
                           message: >-
                             {{ room_name | upper }} MANUAL: Set override - user action conflicts with automation intent
+                            (user_turned_on={{ user_turned_on }}, user_turned_off={{ user_turned_off }},
+                            auto_would_turn_on={{ auto_would_turn_on_intent }}, auto_would_turn_off={{ auto_would_turn_off_intent }},
+                            auto_would_preserve={{ auto_would_preserve_state_intent }}, is_bright={{ is_bright }})
               
               # Clear override when user action aligns with automation intent
               - conditions:
