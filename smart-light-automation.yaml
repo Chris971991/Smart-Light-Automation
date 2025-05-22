@@ -1,16 +1,14 @@
 blueprint:
-  name: Smart Presence Lighting Control with Bed Sensor
+  name: Smart Presence Lighting Control
   description: >
-    # Smart Presence Lighting Control with Bed Sensor
+    # Smart Presence Lighting Control
 
-    Intelligently manages your lighting based on room occupancy, light levels, bed occupancy, and manual controls.
-    Works with any combination of motion sensors, occupancy sensors, illuminance sensors, and optional bed sensors.
+    Intelligently manages your lighting based on room occupancy, light levels, and manual controls.
+    Works with any combination of motion sensors, occupancy sensors, and illuminance sensors.
 
     ## Features
 
     • **Automatic Control** - Turns lights on when dark and someone is present
-    
-    • **Bed Sensor Integration** - Respects sleeping partners by delaying or preventing light activation
     
     • **Energy Saving** - Turns lights off when room is vacant for a configurable time
     
@@ -24,10 +22,9 @@ blueprint:
 
     This blueprint works with:
     • Everything Presence One/Light sensors
-    • Standard motion/PIR sensors  
+    • Standard motion/PIR sensors
     • mmWave/radar presence sensors
     • Any illuminance/light level sensor
-    • Bed occupancy sensors (detects sleeping people that motion sensors miss)
     • Or combinations of these sensors
     
     ## REQUIRED SETUP
@@ -46,10 +43,7 @@ blueprint:
     4. `input_text.[room_name]_last_automation_action`
        Stores timestamp of last automation action
     
-    5. `input_boolean.[room_name]_bed_delay_active` (only if using bed sensor)
-       Tracks when bed delay timer is active - ONLY CREATE THIS FOR BEDROOMS
-    
-    Replace [room_name] with your actual room name (office, bedroom, etc.)
+    Replace [room_name] with your actual room name (office, bedroom, etc.) Ree
 
   domain: automation
   input:
@@ -97,75 +91,6 @@ blueprint:
       selector:
         entity:
           domain: [switch, light]
-    enable_bed_sensor:
-      name: Enable Bed Sensor Integration
-      description: >
-        Enable bed sensor integration for bedroom automation. The bed sensor serves two purposes:
-        1. Detects occupancy when people are sleeping (motion sensors can't detect stationary sleepers)
-        2. Provides sleep-aware lighting control to avoid disturbing partners
-        Highly recommended for bedrooms where people sleep.
-      default: false
-      selector:
-        boolean:
-    bed_sensor:
-      name: Bed Occupancy Sensor (Optional)
-      description: >
-        Bed sensor that detects if someone is in bed. This also serves as an occupancy detector
-        for sleeping people that motion sensors can't detect. Choose "either" side for best results
-        as it detects if anyone is in bed regardless of which side.
-        For bed sensors, use binary_sensor.bed_presence_xxx_bed_occupied_either.
-      default: binary_sensor.bed_presence_master_bedroom_bed_occupied_either
-      selector:
-        entity:
-          domain: binary_sensor
-    bed_sensor_fast:
-      name: Fast Bed Occupancy Sensor (Optional)
-      description: >
-        Fast response bed sensor for immediate detection when someone gets in/out of bed.
-        Also serves as occupancy detection for sleeping people. Choose "either" side for best results.
-        For bed sensors, use binary_sensor.bed_presence_xxx_bed_occupied_either_fast.
-      default: binary_sensor.bed_presence_master_bedroom_bed_occupied_either_fast
-      selector:
-        entity:
-          domain: binary_sensor
-    use_fast_bed_sensor:
-      name: Use Fast Bed Sensor
-      description: >
-        When enabled, uses the fast bed sensor instead of the standard one.
-        Fast sensors respond more quickly but may be more sensitive to false positives.
-      default: false
-      selector:
-        boolean:
-    bed_delay_seconds:
-      name: Bed Occupied Light Delay (seconds)
-      description: >
-        Delay in seconds before turning on lights when someone is detected in the room
-        but the bed is occupied. This gives time for eyes to adjust and avoids waking
-        sleeping partners. Set to 0 to turn on lights immediately even with bed occupied.
-        Recommended: 5-15 seconds for bathroom trips, 0-5 for general movement.
-      default: 10
-      selector:
-        number:
-          min: 0
-          max: 60
-          unit_of_measurement: sec
-          mode: slider
-          step: 1
-    bed_brightness_threshold:
-      name: Bed Brightness Override Threshold
-      description: >
-        When room brightness is above this threshold, bed occupancy is ignored
-        and lights turn on normally. This prevents the bed sensor from interfering
-        during daytime when natural light is sufficient. Set higher to be more
-        restrictive about when bed sensor affects lighting.
-      default: 15
-      selector:
-        number:
-          min: 0
-          max: 100
-          unit_of_measurement: lux
-          mode: slider
-          step: 1
     automation_active_helper:
       name: Automation Active Helper
       description: >
@@ -208,16 +133,6 @@ blueprint:
       selector:
         entity:
           domain: input_text
-    bed_delay_helper:
-      name: Bed Delay Active Helper (Optional)
-      description: >
-        Helper entity that tracks when a bed delay timer is active.
-        Only required if using bed sensor integration. Create and enter the entity ID:
-        input_boolean.[room_name]_bed_delay_active
-        Leave blank if not using bed sensors.
-      default: ""
-      selector:
-        text:
     dark_threshold:
       name: Dark Threshold
       description: >
@@ -336,17 +251,10 @@ variables:
   presence_mmwave_sensor: !input presence_mmwave_sensor
   illuminance_sensor: !input illuminance_sensor
   light_switch: !input light_switch
-  enable_bed_sensor: !input enable_bed_sensor
-  bed_sensor: !input bed_sensor
-  bed_sensor_fast: !input bed_sensor_fast
-  use_fast_bed_sensor: !input use_fast_bed_sensor
-  bed_delay_seconds: !input bed_delay_seconds
-  bed_brightness_threshold: !input bed_brightness_threshold
   automation_active_helper: !input automation_active_helper
   manual_override_helper: !input manual_override_helper
   light_auto_on_helper: !input light_auto_on_helper
   last_automation_action_helper: !input last_automation_action_helper
-  bed_delay_helper: !input bed_delay_helper
   dark_threshold: !input dark_threshold
   bright_threshold: !input bright_threshold
   extremely_dark_threshold: !input extremely_dark_threshold
@@ -370,54 +278,6 @@ variables:
   pir_active: "{{ is_state(presence_pir_sensor, 'on') }}"
   mmwave_active: "{{ is_state(presence_mmwave_sensor, 'on') }}"
   someone_present: "{{ pir_active or mmwave_active }}"
-  # Bed sensor variables
-  active_bed_sensor: >-
-    {% if enable_bed_sensor %}
-      {% if use_fast_bed_sensor %}
-        {{ bed_sensor_fast }}
-      {% else %}
-        {{ bed_sensor }}
-      {% endif %}
-    {% else %}
-      none
-    {% endif %}
-  bed_occupied: >-
-    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
-      {{ is_state(active_bed_sensor, 'on') }}
-    {% else %}
-      false
-    {% endif %}
-  bed_sensor_available: >-
-    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
-      {{ states(active_bed_sensor) not in ['unknown', 'unavailable'] }}
-    {% else %}
-      false
-    {% endif %}
-  bed_should_delay_lights: >-
-    {% if enable_bed_sensor and bed_sensor_available %}
-      {{ bed_occupied and illuminance < bed_brightness_threshold and bed_delay_seconds > 0 }}
-    {% else %}
-      false
-    {% endif %}
-  bed_should_prevent_lights: >-
-    {% if enable_bed_sensor and bed_sensor_available %}
-      {{ bed_occupied and illuminance < bed_brightness_threshold and bed_delay_seconds == 0 }}
-    {% else %}
-      false
-    {% endif %}
-  bed_delay_active: >-
-    {% if enable_bed_sensor and bed_delay_helper != '' %}
-      {{ is_state(bed_delay_helper, 'on') }}
-    {% else %}
-      false
-    {% endif %}
-  # FIXED: Better bed sensor timing detection
-  bed_sensor_recently_triggered: >-
-    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
-      {{ (now() - states[active_bed_sensor].last_changed).total_seconds() < 3.0 }}
-    {% else %}
-      false
-    {% endif %}
   vacant_for_timeout: |-
     {{ not someone_present and
       (now() - states[presence_pir_sensor].last_changed).total_seconds() > (vacancy_timeout_minutes * 60) and
@@ -430,30 +290,6 @@ variables:
   automation_inactive: "{{ is_state(automation_active_helper, 'off') }}"
   in_middle_range: "{{ not is_dark and not is_bright }}"
   hourly_check: "{{ trigger.platform == 'time_pattern' }}"
-  bed_delay_timeout: >-
-    {% if enable_bed_sensor and bed_delay_helper != '' %}
-      {{ trigger.entity_id == bed_delay_helper and trigger.to_state.state == 'off' and trigger.from_state.state == 'on' }}
-    {% else %}
-      false
-    {% endif %}
-  bed_sensor_triggered: >-
-    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
-      {{ trigger.platform == 'state' and trigger.entity_id == active_bed_sensor }}
-    {% else %}
-      false
-    {% endif %}
-  bed_became_occupied: >-
-    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
-      {{ bed_sensor_triggered and trigger.to_state.state == 'on' and trigger.from_state.state == 'off' }}
-    {% else %}
-      false
-    {% endif %}
-  bed_became_unoccupied: >-
-    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
-      {{ bed_sensor_triggered and trigger.to_state.state == 'off' and trigger.from_state.state == 'on' }}
-    {% else %}
-      false
-    {% endif %}
   override_timeout: |-
     {{ hourly_check and is_state(manual_override_helper, 'on') and
       (now() - states[manual_override_helper].last_changed).total_seconds() > (override_timeout_hours * 3600) }}
@@ -475,39 +311,15 @@ variables:
     states(last_automation_action_helper) != '' %}
       {% set timestamp = states(last_automation_action_helper).split('+')[0] %}
       {% set time_diff = (now().replace(tzinfo=None) - strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() %}
-      {{ time_diff < 15.0 and time_diff > 0 }}
+      {{ time_diff < 3.0 and time_diff > 0 }}
     {% else %}
       false
     {% endif %}
-  bed_sensor_recently_active: >-
-    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
-      {% set bed_last_changed = (now() - states[active_bed_sensor].last_changed).total_seconds() %}
-      {{ bed_last_changed < 10.0 }}
-    {% else %}
-      false
-    {% endif %}
-  bed_sensor_caused_recent_automation: >-
-    {% if states(last_automation_action_helper) != 'unknown' and states(last_automation_action_helper) != '' %}
-      {% set timestamp = states(last_automation_action_helper).split('+')[0] %}
-      {% set automation_time_diff = (now().replace(tzinfo=None) - strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() %}
-      {% if automation_time_diff < 8.0 and enable_bed_sensor and active_bed_sensor != 'none' %}
-        {% set bed_last_changed = (now() - states[active_bed_sensor].last_changed).total_seconds() %}
-        {% set bed_automation_diff = bed_last_changed - automation_time_diff %}
-        {{ bed_automation_diff | abs < 3.0 }}
-      {% else %}
-        false
-      {% endif %}
-    {% else %}
-      false
-    {% endif %}
-  auto_would_turn_on_intent: >-
-    {{ (is_dark or is_extremely_dark) and someone_present and not bed_should_prevent_lights and not bed_delay_active }}
-  auto_would_turn_off_intent: >-
-    {{ not someone_present }}
+  auto_would_turn_on_intent: "{{ (is_dark or is_extremely_dark) and someone_present }}"
+  auto_would_turn_off_intent: "{{ not someone_present }}"
   auto_would_preserve_state_intent: >-
-    {{ (in_middle_range and someone_present and not bed_occupied) or 
-       (is_bright and someone_present) or 
-       (bed_should_delay_lights and not bed_delay_active) }}
+    {{ (in_middle_range and someone_present) or (is_bright and someone_present)
+    }}
 
 trigger:
   - entity_id:
@@ -517,10 +329,6 @@ trigger:
       - !input light_switch
       - sun.sun
       - !input sensor_off_latency_input
-    platform: state
-  - entity_id: !input bed_sensor
-    platform: state
-  - entity_id: !input bed_sensor_fast
     platform: state
   - platform: time_pattern
     hours: /1
@@ -541,227 +349,37 @@ action:
           level: info
           message: >-
             {{ room_name | upper }} INITIAL STATE: trigger_platform={{
-            trigger.platform }}, trigger_entity={{ trigger.entity_id }},
-            illuminance={{ illuminance }}, is_dark={{ is_dark }},
-            is_extremely_dark={{ is_extremely_dark }}, someone_present={{
+            trigger.platform }},  trigger_entity={{ trigger.entity_id }},
+            illuminance={{ illuminance }},  is_dark={{ is_dark }},
+            is_extremely_dark={{ is_extremely_dark }},  someone_present={{
             someone_present }} (pir={{ pir_active }}, mmwave={{ mmwave_active }}), 
             lights_on={{ lights_on }}, manual_override={{ manual_override }}, 
             vacancy_timeout_minutes={{ vacancy_timeout_minutes }},
             sensor_off_latency_seconds={{ sensor_off_latency_seconds }},
             last_automation_action={{ states(last_automation_action_helper) }}
-      - if:
-          - condition: template
-            value_template: "{{ enable_bed_sensor }}"
-        then:
-          - service: system_log.write
-            data:
-              level: info
-              message: >-
-                {{ room_name | upper }} BED SENSOR STATE: bed_occupied={{ bed_occupied }},
-                bed_became_occupied={{ bed_became_occupied }}, bed_became_unoccupied={{ bed_became_unoccupied }},
-                bed_should_delay={{ bed_should_delay_lights }}, bed_should_prevent={{ bed_should_prevent_lights }},
-                bed_delay_active={{ bed_delay_active }}, bed_sensor_available={{ bed_sensor_available }},
-                active_bed_sensor={{ active_bed_sensor }}, bed_delay_timeout={{ bed_delay_timeout }},
-                bed_sensor_recently_triggered={{ bed_sensor_recently_triggered }}
-
-  # ENHANCED DEBUG: Check all manual detection variables
-  - if:
-      - condition: template
-        value_template: "{{ enable_debug_logs and trigger.platform == 'state' and trigger.entity_id == light_switch }}"
-    then:
       - service: system_log.write
         data:
           level: info
           message: >-
-            {{ room_name | upper }} LIGHT TRIGGER DEBUG: 
-            trigger.entity_id={{ trigger.entity_id }}, 
-            light_switch={{ light_switch }},
-            trigger_match={{ trigger.entity_id == light_switch }},
-            user_toggled_lights={{ user_toggled_lights }},
-            automation_initiated_change={{ automation_initiated_change }},
-            bed_sensor_recently_triggered={{ bed_sensor_recently_triggered }},
-            bed_sensor_caused_recent_automation={{ bed_sensor_caused_recent_automation }},
-            user_turned_on={{ user_turned_on }}, user_turned_off={{ user_turned_off }}
+            {{ room_name | upper }} TRIGGER DETAILS:  {% if trigger.platform ==
+            'state' %}from_state={{ trigger.from_state.state }}, to_state={{
+            trigger.to_state.state }}{% endif %} {% if user_toggled_lights %}USER
+            TOGGLED LIGHTS: {{ trigger.from_state.state }} -> {{
+            trigger.to_state.state }}{% endif %}
+      - service: system_log.write
+        data:
+          level: info
+          message: >-
+            {{ room_name | upper }} ACTION TYPE: user_toggled_lights={{
+            user_toggled_lights }},  automation_initiated_change={{
+            automation_initiated_change }}, time_since_last_automation={{
+            time_since_last_automation }}s
 
-  # Handle manual user actions first (before automation logic) - FIXED
-  - if:
-      - condition: template
-        value_template: "{{ trigger.platform == 'state' and trigger.entity_id == light_switch }}"
-      - condition: template
-        value_template: "{{ not automation_initiated_change }}"
-      - condition: template
-        value_template: "{{ not bed_sensor_recently_triggered }}"
-      - condition: template
-        value_template: "{{ not bed_sensor_caused_recent_automation }}"
-    then:
-      - if:
-          - condition: template
-            value_template: "{{ enable_debug_logs }}"
-        then:
-          - service: system_log.write
-            data:
-              level: info
-              message: >-
-                {{ room_name | upper }} MANUAL ACTION DETECTED:
-                user_turned_on={{ trigger.to_state.state == 'on' }}, 
-                user_turned_off={{ trigger.to_state.state == 'off' }}, 
-                automation_initiated={{ automation_initiated_change }},
-                time_since_last_automation={{ time_since_last_automation }},
-                bed_sensor_recently_triggered={{ bed_sensor_recently_triggered }}
-      
-      # Cancel any active bed delay when user manually controls lights
-      - if:
-          - condition: template
-            value_template: "{{ enable_bed_sensor and bed_delay_helper != '' and bed_delay_active }}"
-        then:
-          - service: input_boolean.turn_off
-            target:
-              entity_id: "{{ bed_delay_helper }}"
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: >-
-                    {{ room_name | upper }} MANUAL ACTION: Cancelled bed delay timer
-      
-      # Handle manual override logic
-      - choose:
-          # Clear override when user turns off lights in bright room while present
-          - conditions:
-              - condition: template
-                value_template: "{{ trigger.to_state.state == 'off' and is_bright and someone_present }}"
-              - condition: template
-                value_template: "{{ automation_inactive }}"
-            sequence:
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ manual_override_helper }}"
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ light_auto_on_helper }}"
-              - if:
-                  - condition: template
-                    value_template: "{{ enable_debug_logs }}"
-                then:
-                  - service: system_log.write
-                    data:
-                      level: info
-                      message: >-
-                        {{ room_name | upper }} MANUAL: Cleared override - turned off lights in bright room
-          
-          # Set override when user turns lights back on while bed is occupied
-          - conditions:
-              - condition: template
-                value_template: "{{ trigger.to_state.state == 'on' and bed_occupied and enable_bed_sensor }}"
-              - condition: template
-                value_template: "{{ automation_inactive }}"
-            sequence:
-              - service: input_boolean.turn_on
-                target:
-                  entity_id: "{{ manual_override_helper }}"
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ light_auto_on_helper }}"
-              - if:
-                  - condition: template
-                    value_template: "{{ enable_debug_logs }}"
-                then:
-                  - service: system_log.write
-                    data:
-                      level: info
-                      message: >-
-                        {{ room_name | upper }} MANUAL: Set override - user turned on lights while bed occupied
-          
-          # Set override when user action conflicts with what automation would do
-          - conditions:
-              - condition: template
-                value_template: "{{ automation_inactive }}"
-              - condition: or
-                conditions:
-                  # User turned on when automation would turn off or preserve off state
-                  - condition: template
-                    value_template: "{{ trigger.to_state.state == 'on' and (auto_would_turn_off_intent or auto_would_preserve_state_intent) }}"
-                  # User turned off when automation would turn on or preserve on state (but not in bright room)
-                  - condition: template
-                    value_template: "{{ trigger.to_state.state == 'off' and auto_would_turn_on_intent and not is_bright }}"
-            sequence:
-              - service: input_boolean.turn_on
-                target:
-                  entity_id: "{{ manual_override_helper }}"
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ light_auto_on_helper }}"
-              - if:
-                  - condition: template
-                    value_template: "{{ enable_debug_logs }}"
-                then:
-                  - service: system_log.write
-                    data:
-                      level: info
-                      message: >-
-                        {{ room_name | upper }} MANUAL: Set override - user action conflicts with automation intent
-                        (user_turned_on={{ trigger.to_state.state == 'on' }}, user_turned_off={{ trigger.to_state.state == 'off' }},
-                        auto_would_turn_on={{ auto_would_turn_on_intent }}, auto_would_turn_off={{ auto_would_turn_off_intent }},
-                        auto_would_preserve={{ auto_would_preserve_state_intent }}, is_bright={{ is_bright }})
-          
-          # Clear override when user action aligns with automation intent
-          - conditions:
-              - condition: template
-                value_template: "{{ automation_inactive }}"
-              - condition: or
-                conditions:
-                  - condition: template
-                    value_template: "{{ trigger.to_state.state == 'on' and auto_would_turn_on_intent }}"
-                  - condition: template
-                    value_template: "{{ trigger.to_state.state == 'off' and auto_would_turn_off_intent }}"
-            sequence:
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ manual_override_helper }}"
-              - if:
-                  - condition: template
-                    value_template: "{{ enable_debug_logs }}"
-                then:
-                  - service: system_log.write
-                    data:
-                      level: info
-                      message: >-
-                        {{ room_name | upper }} MANUAL: Cleared override - user action aligns with automation
-        
-        # Default: set override for any other manual action
-        default:
-          - service: input_boolean.turn_on
-            target:
-              entity_id: "{{ manual_override_helper }}"
-          - service: input_boolean.turn_off
-            target:
-              entity_id: "{{ light_auto_on_helper }}"
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: >-
-                    {{ room_name | upper }} MANUAL: Set override - default manual action
-
-  # Handle bed delay timeout - turn on lights after delay
+  # Handle manual user actions
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ bed_delay_timeout }}"
-          - condition: template
-            value_template: "{{ someone_present }}"
-          - condition: template
-            value_template: "{{ is_dark or is_extremely_dark }}"
-          - condition: template
-            value_template: "{{ not lights_on }}"
-          - condition: template
-            value_template: "{{ not manual_override }}"
+            value_template: "{{ user_toggled_lights and not automation_initiated_change }}"
         sequence:
           - if:
               - condition: template
@@ -771,42 +389,370 @@ action:
                 data:
                   level: info
                   message: >-
-                    {{ room_name | upper }} BED DELAY TIMEOUT: Turning on lights after bed delay
+                    {{ room_name | upper }} MANUAL ACTION DETECTED:
+                    user_turned_on={{ user_turned_on }}, user_turned_off={{
+                    user_turned_off }}
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} HELPER STATES BEFORE:
+                    manual_override_helper={{ is_state(manual_override_helper, 'on')
+                    }}, automation_active_helper={{
+                    is_state(automation_active_helper, 'on') }},
+                    light_auto_on_helper={{ is_state(light_auto_on_helper, 'on') }}
           - service: input_boolean.turn_on
             target:
-              entity_id: "{{ automation_active_helper }}"
-          - service: input_boolean.turn_on
-            target:
-              entity_id: "{{ light_auto_on_helper }}"
-          - service: input_text.set_value
-            target:
-              entity_id: "{{ last_automation_action_helper }}"
-            data:
-              value: "{{ now().isoformat() }}"
+              entity_id: "{{ manual_override_helper }}"
+          - delay:
+              milliseconds: 100
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} MANUAL OVERRIDE ATTEMPT: Successfully
+                    set to {{ is_state(manual_override_helper, 'on') }}
+          - delay:
+              milliseconds: 300
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} USER TOGGLE DEBUG: illuminance={{
+                    illuminance }},  is_dark={{ is_dark }}, is_bright={{ is_bright
+                    }}, in_middle_range={{ in_middle_range }},  someone_present={{
+                    someone_present }}, user_turned_on={{ user_turned_on }}, 
+                    user_turned_off={{ user_turned_off }}, manual_override_var={{
+                    manual_override }}, 
+                    manual_override_helper_state={{is_state(manual_override_helper,
+                    'on')}},  automation_inactive={{ automation_inactive }},
+                    is_daytime={{ is_daytime }},  is_nighttime={{ is_nighttime }},
+                    light_recently_changed={{ light_recently_changed }}, 
+                    calculated_vacancy_min={{ vacancy_timeout_minutes }}, 
+                    auto_would_turn_on={{ auto_would_turn_on_intent }}, 
+                    auto_would_turn_off={{ auto_would_turn_off_intent }},
+                    auto_would_preserve_state={{ auto_would_preserve_state_intent }}
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ light_switch.startswith('light.') }}"
+                    value_template: >-
+                      {{ (now() -
+                      states[automation_active_helper].last_changed).total_seconds()
+                      > 2.0 }}
                 sequence:
-                  - service: light.turn_on
+                  - service: input_boolean.turn_off
                     target:
-                      entity_id: "{{ light_switch }}"
+                      entity_id: "{{ light_auto_on_helper }}"
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} USER TOGGLE: Detected user
+                            toggle, turning off light_auto_on_helper.
             default:
-              - service: switch.turn_on
-                target:
-                  entity_id: "{{ light_switch }}"
-          - delay:
-              milliseconds: 1500
-          - service: input_boolean.turn_off
-            target:
-              entity_id: "{{ automation_active_helper }}"
+              - if:
+                  - condition: template
+                    value_template: "{{ enable_debug_logs }}"
+                then:
+                  - service: system_log.write
+                    data:
+                      level: info
+                      message: >-
+                        {{ room_name | upper }} USER TOGGLE: Likely automation
+                        action, light_auto_on_helper preserved.
+          - choose:
+              # First condition - matches working automation order - Check for user turning off lights in bright room
+              - conditions:
+                  - condition: template
+                    value_template: "{{ user_turned_off and is_bright and someone_present }}"
+                  - condition: template
+                    value_template: "{{ automation_inactive }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (now() -
+                      states[automation_active_helper].last_changed).total_seconds()
+                      > 2.0 }}
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: debug
+                          message: >-
+                            {{ room_name | upper }} OVERRIDE CONDITION SET 4 MET:
+                            user_turned_off AND is_bright AND someone_present AND
+                            automation_inactive
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ manual_override_helper }}"
+                  - delay:
+                      milliseconds: 100
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE AFTER SET 4:
+                            Helper state is now {{ is_state(manual_override_helper,
+                            'on') }}
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE: Cleared, user turned off 
+                            lights in bright room.
+              # Condition for user turning on lights
+              - conditions:
+                  - condition: template
+                    value_template: "{{ user_turned_on }}"
+                  - condition: template
+                    value_template: >-
+                      {{ auto_would_turn_off_intent or
+                      auto_would_preserve_state_intent }}
+                  - condition: template
+                    value_template: "{{ automation_inactive }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (now() -
+                      states[automation_active_helper].last_changed).total_seconds()
+                      > 2.0 }}
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: debug
+                          message: >-
+                            {{ room_name | upper }} OVERRIDE CONDITION SET 1 MET:
+                            user_turned_on AND (auto_would_turn_off_intent OR
+                            auto_would_preserve_state_intent) AND
+                            automation_inactive
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: "{{ manual_override_helper }}"
+                  - delay:
+                      milliseconds: 100
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE AFTER SET 1:
+                            Helper state is now {{ is_state(manual_override_helper,
+                            'on') }}
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE: User turned
+                            lights ON. Setting override.
+              # Condition for user turning off lights in non-bright conditions
+              - conditions:
+                  - condition: template
+                    value_template: "{{ user_turned_off }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (auto_would_turn_on_intent or
+                      auto_would_preserve_state_intent) and not is_bright }}
+                  - condition: template
+                    value_template: "{{ automation_inactive }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (now() -
+                      states[automation_active_helper].last_changed).total_seconds()
+                      > 2.0 }}
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: debug
+                          message: >-
+                            {{ room_name | upper }} OVERRIDE CONDITION SET 2 MET:
+                            user_turned_off AND (auto_would_turn_on_intent OR
+                            auto_would_preserve_state_intent) AND not is_bright AND
+                            automation_inactive
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: "{{ manual_override_helper }}"
+                  - delay:
+                      milliseconds: 100
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE AFTER SET 2:
+                            Helper state is now {{ is_state(manual_override_helper,
+                            'on') }}
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE: User turned
+                            lights OFF. Setting override.
+              # Condition for when user action agrees with automation intent
+              - conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ (user_turned_on and auto_would_turn_on_intent) or
+                      (user_turned_off and auto_would_turn_off_intent) }}
+                  - condition: template
+                    value_template: "{{ automation_inactive }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (now() -
+                      states[automation_active_helper].last_changed).total_seconds()
+                      > 2.0 }}
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: debug
+                          message: >-
+                            {{ room_name | upper }} OVERRIDE CONDITION SET 3 MET:
+                            (user_turned_on AND auto_would_turn_on_intent) OR
+                            (user_turned_off AND auto_would_turn_off_intent) AND
+                            automation_inactive
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ manual_override_helper }}"
+                  - delay:
+                      milliseconds: 100
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE AFTER SET 3:
+                            Helper state is now {{ is_state(manual_override_helper,
+                            'on') }}
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE: Cleared, user
+                            action agrees.
+              # Duplicate condition for bright room, to match working automation
+              - conditions:
+                  - condition: template
+                    value_template: "{{ user_turned_off and is_bright and someone_present }}"
+                  - condition: template
+                    value_template: "{{ automation_inactive }}"
+                  - condition: template
+                    value_template: >-
+                      {{ (now() -
+                      states[automation_active_helper].last_changed).total_seconds()
+                      > 2.0 }}
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: debug
+                          message: >-
+                            {{ room_name | upper }} OVERRIDE CONDITION SET 4 MET:
+                            user_turned_off AND is_bright AND someone_present AND
+                            automation_inactive
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ manual_override_helper }}"
+                  - delay:
+                      milliseconds: 100
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE AFTER SET 4:
+                            Helper state is now {{ is_state(manual_override_helper,
+                            'on') }}
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL OVERRIDE: Cleared, user turned off 
+                            lights in bright room.
+            default:
+              - if:
+                  - condition: template
+                    value_template: "{{ enable_debug_logs }}"
+                then:
+                  - service: system_log.write
+                    data:
+                      level: warning
+                      message: >-
+                        {{ room_name | upper }} OVERRIDE UNCLEAR: User toggle did
+                        not match specific override conditions.  Debug:
+                        user_turned_on={{ user_turned_on }}, user_turned_off={{
+                        user_turned_off }}, auto_would_turn_on={{
+                        auto_would_turn_on_intent }},  auto_would_turn_off={{
+                        auto_would_turn_off_intent }}, auto_would_preserve_state={{
+                        auto_would_preserve_state_intent }}, automation_inactive={{
+                        automation_inactive }},
+                        time_since_automation_active_change={{ (now() -
+                        states[automation_active_helper].last_changed).total_seconds()
+                        }}s
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} AFTER USER TOGGLE PROCESSING:
+                    manual_override={{ is_state(manual_override_helper, 'on') }}, 
+                    automation_active={{ is_state(automation_active_helper, 'on')
+                    }},  light_auto_on={{ is_state(light_auto_on_helper, 'on') }}, 
+                    lights_state={{ states(light_switch) }}
 
-  # Main automation logic (only runs if not manually overridden)
+  # Main automation logic
   - choose:
       # Skip actions if override is active
       - conditions:
           - condition: template
             value_template: "{{ manual_override }}"
+          - condition: template
+            value_template: "{{ not user_toggled_lights or automation_initiated_change }}"
           - condition: template
             value_template: "{{ not override_timeout }}"
           - condition: template
@@ -821,134 +767,18 @@ action:
                   level: info
                   message: >-
                     {{ room_name | upper }} MANUAL OVERRIDE: Skipping auto actions.
+                    Vacancy_min: {{ vacancy_timeout_minutes }} DEBUG:
+                    manual_override={{ manual_override }}, user_toggled_lights={{
+                    user_toggled_lights }},  override_timeout={{ override_timeout
+                    }}, vacant_for_timeout={{ vacant_for_timeout }},
+                    automation_initiated_change={{ automation_initiated_change }},
+                    time_since_pir_change={{ (now() -
+                    states[presence_pir_sensor].last_changed).total_seconds() }}s,
+                    time_since_mmwave_change={{ (now() -
+                    states[presence_mmwave_sensor].last_changed).total_seconds()
+                    }}s, vacancy_timeout_seconds={{ vacancy_timeout_minutes * 60 }}s
 
-      # Automatically turn off lights when someone gets into bed (only on bed sensor trigger)
-      - conditions:
-          - condition: template
-            value_template: "{{ bed_became_occupied }}"
-          - condition: template
-            value_template: "{{ lights_on }}"
-          - condition: template
-            value_template: "{{ not manual_override }}"
-          - condition: template
-            value_template: "{{ enable_bed_sensor and bed_sensor_available }}"
-        sequence:
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: >-
-                    {{ room_name | upper }} BED OCCUPIED AUTO-OFF: Someone got into bed, turning off lights
-          - service: input_boolean.turn_on
-            target:
-              entity_id: "{{ automation_active_helper }}"
-          - service: input_boolean.turn_off
-            target:
-              entity_id: "{{ light_auto_on_helper }}"
-          - service: input_text.set_value
-            target:
-              entity_id: "{{ last_automation_action_helper }}"
-            data:
-              value: "{{ now().isoformat() }}"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ light_switch.startswith('light.') }}"
-                sequence:
-                  - service: light.turn_off
-                    target:
-                      entity_id: "{{ light_switch }}"
-            default:
-              - service: switch.turn_off
-                target:
-                  entity_id: "{{ light_switch }}"
-          - delay:
-              milliseconds: 1500
-          - service: input_boolean.turn_off
-            target:
-              entity_id: "{{ automation_active_helper }}"
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: "{{ room_name | upper }} AUTO: Turned OFF - Someone got into bed."
-
-      # Automatically turn on lights when someone gets out of bed in dark room (only on bed sensor trigger)
-      - conditions:
-          - condition: template
-            value_template: "{{ bed_became_unoccupied }}"
-          - condition: template
-            value_template: "{{ is_dark or is_extremely_dark }}"
-          - condition: template
-            value_template: "{{ someone_present }}"
-          - condition: template
-            value_template: "{{ not lights_on }}"
-          - condition: template
-            value_template: "{{ not manual_override }}"
-          - condition: template
-            value_template: "{{ enable_bed_sensor and bed_sensor_available }}"
-        sequence:
-          # Cancel any active bed delay first
-          - if:
-              - condition: template
-                value_template: "{{ bed_delay_helper != '' and bed_delay_active }}"
-            then:
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ bed_delay_helper }}"
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: >-
-                    {{ room_name | upper }} BED UNOCCUPIED AUTO-ON: Someone got out of bed in dark room, turning on lights
-          - service: input_boolean.turn_on
-            target:
-              entity_id: "{{ automation_active_helper }}"
-          - service: input_boolean.turn_on
-            target:
-              entity_id: "{{ light_auto_on_helper }}"
-          - service: input_text.set_value
-            target:
-              entity_id: "{{ last_automation_action_helper }}"
-            data:
-              value: "{{ now().isoformat() }}"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ light_switch.startswith('light.') }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: "{{ light_switch }}"
-            default:
-              - service: switch.turn_on
-                target:
-                  entity_id: "{{ light_switch }}"
-          - delay:
-              milliseconds: 1500
-          - service: input_boolean.turn_off
-            target:
-              entity_id: "{{ automation_active_helper }}"
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: "{{ room_name | upper }} AUTO: Turned ON - Someone got out of bed in dark room."
-
-      # Automatically turn on lights when dark and someone present (with bed sensor logic)
+      # Automatically turn on lights when dark and someone present
       - conditions:
           - condition: template
             value_template: "{{ is_dark or is_extremely_dark }}"
@@ -958,8 +788,6 @@ action:
             value_template: "{{ not lights_on }}"
           - condition: template
             value_template: "{{ not manual_override }}"
-          - condition: template
-            value_template: "{{ not bed_delay_active }}"
           - condition: or
             conditions:
               - condition: template
@@ -976,90 +804,50 @@ action:
                   level: info
                   message: >-
                     {{ room_name | upper }} AUTO-ON CONDITIONS MET: is_dark={{
-                    is_dark }}, someone_present={{ someone_present }}, 
-                    bed_should_delay={{ bed_should_delay_lights }}, 
-                    bed_should_prevent={{ bed_should_prevent_lights }}
-          # Check bed sensor conditions
+                    is_dark }}, is_extremely_dark={{ is_extremely_dark }}, 
+                    someone_present={{ someone_present }}, lights_on={{ lights_on
+                    }}, manual_override={{ manual_override }},
+                    light_recently_changed={{ light_recently_changed }}
+          - service: input_boolean.turn_on
+            target:
+              entity_id: "{{ automation_active_helper }}"
+          - service: input_boolean.turn_on
+            target:
+              entity_id: "{{ light_auto_on_helper }}"
+          - service: input_text.set_value
+            target:
+              entity_id: "{{ last_automation_action_helper }}"
+            data:
+              value: "{{ now().isoformat() }}"
           - choose:
-              # Bed occupied and should prevent lights entirely
               - conditions:
                   - condition: template
-                    value_template: "{{ bed_should_prevent_lights }}"
+                    value_template: "{{ light_switch.startswith('light.') }}"
                 sequence:
-                  - if:
-                      - condition: template
-                        value_template: "{{ enable_debug_logs }}"
-                    then:
-                      - service: system_log.write
-                        data:
-                          level: info
-                          message: >-
-                            {{ room_name | upper }} BED PREVENTION: Not turning on lights, bed occupied
-              # Bed occupied and should delay lights
-              - conditions:
-                  - condition: template
-                    value_template: "{{ bed_should_delay_lights }}"
-                  - condition: template
-                    value_template: "{{ bed_delay_helper != '' }}"
-                sequence:
-                  - if:
-                      - condition: template
-                        value_template: "{{ enable_debug_logs }}"
-                    then:
-                      - service: system_log.write
-                        data:
-                          level: info
-                          message: >-
-                            {{ room_name | upper }} BED DELAY: Starting {{ bed_delay_seconds }}s delay timer
-                  - service: input_boolean.turn_on
-                    target:
-                      entity_id: "{{ bed_delay_helper }}"
-                  - delay:
-                      seconds: "{{ bed_delay_seconds }}"
-                  - service: input_boolean.turn_off
-                    target:
-                      entity_id: "{{ bed_delay_helper }}"
-            # Default: turn on lights normally (no bed issues)
-            default:
-              - service: input_boolean.turn_on
-                target:
-                  entity_id: "{{ automation_active_helper }}"
-              - service: input_boolean.turn_on
-                target:
-                  entity_id: "{{ light_auto_on_helper }}"
-              - service: input_text.set_value
-                target:
-                  entity_id: "{{ last_automation_action_helper }}"
-                data:
-                  value: "{{ now().isoformat() }}"
-              - choose:
-                  - conditions:
-                      - condition: template
-                        value_template: "{{ light_switch.startswith('light.') }}"
-                    sequence:
-                      - service: light.turn_on
-                        target:
-                          entity_id: "{{ light_switch }}"
-                default:
-                  - service: switch.turn_on
+                  - service: light.turn_on
                     target:
                       entity_id: "{{ light_switch }}"
-              - delay:
-                  milliseconds: 1500
-              - service: input_boolean.turn_off
+            default:
+              - service: switch.turn_on
                 target:
-                  entity_id: "{{ automation_active_helper }}"
-              - if:
-                  - condition: template
-                    value_template: "{{ enable_debug_logs }}"
-                then:
-                  - service: system_log.write
-                    data:
-                      level: info
-                      message: >-
-                        {{ room_name | upper }} AUTO: Turned ON - Dark & Occupied, no bed issues.
+                  entity_id: "{{ light_switch }}"
+          - delay:
+              milliseconds: 1500
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ automation_active_helper }}"
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} AUTO: Turned ON - Dark/Extremely Dark &
+                    Occupied.
 
-      # Automatically turn off lights when vacant (bed sensor doesn't affect turn-off)
+      # Automatically turn off lights when vacant
       - conditions:
           - condition: template
             value_template: "{{ not someone_present }}"
@@ -1076,15 +864,9 @@ action:
                 data:
                   level: info
                   message: >-
-                    {{ room_name | upper }} AUTO-OFF CONDITIONS MET: Turning off lights
-          # Cancel any active bed delay when room becomes vacant
-          - if:
-              - condition: template
-                value_template: "{{ enable_bed_sensor and bed_delay_helper != '' and bed_delay_active }}"
-            then:
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ bed_delay_helper }}"
+                    {{ room_name | upper }} AUTO-OFF CONDITIONS MET:
+                    someone_present={{ someone_present }},  lights_on={{ lights_on
+                    }}, manual_override={{ manual_override }}
           - service: input_boolean.turn_on
             target:
               entity_id: "{{ automation_active_helper }}"
@@ -1129,20 +911,27 @@ action:
           - condition: template
             value_template: "{{ manual_override }}"
         sequence:
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} VACANT TIMEOUT CONDITIONS MET:
+                    vacant_for_timeout={{ vacant_for_timeout }},  manual_override={{
+                    manual_override }},  time_since_pir_change={{ (now() -
+                    states[presence_pir_sensor].last_changed).total_seconds() }}s,
+                    time_since_mmwave_change={{ (now() -
+                    states[presence_mmwave_sensor].last_changed).total_seconds()
+                    }}s, vacancy_timeout_seconds={{ vacancy_timeout_minutes * 60 }}s
           - service: input_boolean.turn_off
             target:
               entity_id: "{{ manual_override_helper }}"
           - service: input_boolean.turn_off
             target:
               entity_id: "{{ light_auto_on_helper }}"
-          # Also clear bed delay if active
-          - if:
-              - condition: template
-                value_template: "{{ enable_bed_sensor and bed_delay_helper != '' and bed_delay_active }}"
-            then:
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ bed_delay_helper }}"
           - delay:
               milliseconds: 100
           - if:
@@ -1153,7 +942,15 @@ action:
                 data:
                   level: info
                   message: >-
-                    {{ room_name | upper }} OVERRIDE: Cleared after vacancy.
+                    {{ room_name | upper }} VACANCY TIMEOUT: Override cleared status
+                    is {{ not is_state(manual_override_helper, 'on') }}
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} OVERRIDE: Cleared after vacancy ({{
+                    vacancy_timeout_minutes }}m / {{ sensor_off_latency_seconds }}s
+                    latency).
           - service: automation.trigger
             target:
               entity_id: "{{this.entity_id}}"
@@ -1165,26 +962,38 @@ action:
           - condition: template
             value_template: "{{ override_timeout }}"
         sequence:
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} HOURLY TIMEOUT CONDITIONS MET:
+                    override_timeout={{ override_timeout }}, is_state_override={{
+                    is_state(manual_override_helper, 'on') }},
+                    override_time_seconds={{ (now() -
+                    states[manual_override_helper].last_changed).total_seconds()
+                    }}s, timeout_seconds={{ override_timeout_hours * 3600 }}s
           - service: input_boolean.turn_off
             target:
               entity_id: "{{ manual_override_helper }}"
           - service: input_boolean.turn_off
             target:
               entity_id: "{{ light_auto_on_helper }}"
-          # Also clear bed delay if active
-          - if:
-              - condition: template
-                value_template: "{{ enable_bed_sensor and bed_delay_helper != '' and bed_delay_active }}"
-            then:
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: "{{ bed_delay_helper }}"
           - delay:
               milliseconds: 100
           - if:
               - condition: template
                 value_template: "{{ enable_debug_logs }}"
             then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    {{ room_name | upper }} HOURLY TIMEOUT: Override cleared status
+                    is {{ not is_state(manual_override_helper, 'on') }}
               - service: system_log.write
                 data:
                   level: info
@@ -1205,7 +1014,12 @@ action:
             data:
               level: info
               message: >-
-                {{ room_name | upper }} NO CONDITIONS MET: Monitoring state changes.
+                {{ room_name | upper }} NO CONDITIONS MET: is_dark={{ is_dark }},
+                is_extremely_dark={{ is_extremely_dark }}, someone_present={{
+                someone_present }}, lights_on={{ lights_on }}, manual_override={{
+                manual_override }}, light_recently_changed={{ light_recently_changed
+                }}, vacant_for_timeout={{ vacant_for_timeout }}, override_timeout={{
+                override_timeout }}
 
   # Final state logging
   - if:
@@ -1217,10 +1031,10 @@ action:
           level: info
           message: >-
             {{ room_name | upper }} FINAL STATE: manual_override={{
-            is_state(manual_override_helper, 'on') }}, automation_active={{
-            is_state(automation_active_helper, 'on') }}, light_auto_on={{
+            is_state(manual_override_helper, 'on') }},  automation_active={{
+            is_state(automation_active_helper, 'on') }},  light_auto_on={{
             is_state(light_auto_on_helper, 'on') }}, lights_state={{
-            states(light_switch) }}, bed_delay_active={{ bed_delay_active }}
+            states(light_switch) }}
       - service: system_log.write
         data:
           level: info
