@@ -468,7 +468,7 @@ variables:
     states(last_automation_action_helper) != '' %}
       {% set timestamp = states(last_automation_action_helper).split('+')[0] %}
       {% set time_diff = (now().replace(tzinfo=None) - strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() %}
-      {{ time_diff < 10.0 and time_diff > 0 }}
+      {{ time_diff < 3.0 and time_diff > 0 }}
     {% else %}
       false
     {% endif %}
@@ -540,9 +540,6 @@ action:
       - conditions:
           - condition: template
             value_template: "{{ user_toggled_lights and not automation_initiated_change }}"
-          # Don't process manual actions if this was triggered by the bed sensor changing
-          - condition: template
-            value_template: "{{ not bed_sensor_triggered }}"
         sequence:
           - if:
               - condition: template
@@ -599,6 +596,29 @@ action:
                           level: info
                           message: >-
                             {{ room_name | upper }} MANUAL: Cleared override - turned off lights in bright room
+              
+              # Set override when user turns lights back on while bed is occupied
+              - conditions:
+                  - condition: template
+                    value_template: "{{ user_turned_on and bed_occupied and enable_bed_sensor }}"
+                  - condition: template
+                    value_template: "{{ automation_inactive }}"
+                sequence:
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: "{{ manual_override_helper }}"
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ light_auto_on_helper }}"
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            {{ room_name | upper }} MANUAL: Set override - user turned on lights while bed occupied
               
               # Set override when user action conflicts with what automation would do
               - conditions:
