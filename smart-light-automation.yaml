@@ -49,7 +49,7 @@ blueprint:
     5. `input_boolean.[room_name]_bed_delay_active` (only if using bed sensor)
        Tracks when bed delay timer is active - ONLY CREATE THIS FOR BEDROOMS
     
-    Replace [room_name] with your actual room name (office, bedroom, etc.)
+    Replace [room_name] with your actual room name (office, bedroom, etc.) ree
 
   domain: automation
   input:
