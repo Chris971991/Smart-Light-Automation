@@ -212,14 +212,12 @@ blueprint:
       name: Bed Delay Active Helper (Optional)
       description: >
         Helper entity that tracks when a bed delay timer is active.
-        Only required if using bed sensor integration. You MUST create this
-        input_boolean entity ONLY if enabling bed sensor features.
-        Leave as default if not using bed sensors.
+        Only required if using bed sensor integration. Create and enter the entity ID:
+        input_boolean.[room_name]_bed_delay_active
+        Leave blank if not using bed sensors.
       default: ""
       selector:
-        entity:
-          domain: input_boolean
-          multiple: false
+        text:
     dark_threshold:
       name: Dark Threshold
       description: >
@@ -432,7 +430,12 @@ variables:
   automation_inactive: "{{ is_state(automation_active_helper, 'off') }}"
   in_middle_range: "{{ not is_dark and not is_bright }}"
   hourly_check: "{{ trigger.platform == 'time_pattern' }}"
-  bed_delay_timeout: "{{ enable_bed_sensor and bed_delay_helper != '' and trigger.entity_id == bed_delay_helper and trigger.to_state.state == 'off' and trigger.from_state.state == 'on' }}"
+  bed_delay_timeout: >-
+    {% if enable_bed_sensor and bed_delay_helper != '' %}
+      {{ trigger.entity_id == bed_delay_helper and trigger.to_state.state == 'off' and trigger.from_state.state == 'on' }}
+    {% else %}
+      false
+    {% endif %}
   override_timeout: |-
     {{ hourly_check and is_state(manual_override_helper, 'on') and
       (now() - states[manual_override_helper].last_changed).total_seconds() > (override_timeout_hours * 3600) }}
@@ -476,8 +479,6 @@ trigger:
   - entity_id: !input bed_sensor
     platform: state
   - entity_id: !input bed_sensor_fast
-    platform: state
-  - entity_id: !input bed_delay_helper
     platform: state
   - platform: time_pattern
     hours: /1
