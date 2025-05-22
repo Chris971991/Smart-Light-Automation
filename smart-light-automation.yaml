@@ -564,30 +564,33 @@ action:
                 active_bed_sensor={{ active_bed_sensor }}, bed_delay_timeout={{ bed_delay_timeout }},
                 bed_sensor_recently_triggered={{ bed_sensor_recently_triggered }}
 
-  # FIXED: Debug manual action detection
+  # ENHANCED DEBUG: Check all manual detection variables
   - if:
       - condition: template
-        value_template: "{{ enable_debug_logs and user_toggled_lights }}"
+        value_template: "{{ enable_debug_logs and trigger.platform == 'state' and trigger.entity_id == light_switch }}"
     then:
       - service: system_log.write
         data:
           level: info
           message: >-
-            {{ room_name | upper }} MANUAL DETECTION DEBUG: 
+            {{ room_name | upper }} LIGHT TRIGGER DEBUG: 
+            trigger.entity_id={{ trigger.entity_id }}, 
+            light_switch={{ light_switch }},
+            trigger_match={{ trigger.entity_id == light_switch }},
             user_toggled_lights={{ user_toggled_lights }},
             automation_initiated_change={{ automation_initiated_change }},
             bed_sensor_recently_triggered={{ bed_sensor_recently_triggered }},
             bed_sensor_caused_recent_automation={{ bed_sensor_caused_recent_automation }},
             user_turned_on={{ user_turned_on }}, user_turned_off={{ user_turned_off }}
 
-  # Handle manual user actions first (before automation logic)
+  # Handle manual user actions first (before automation logic) - FIXED
   - if:
       - condition: template
-        value_template: "{{ user_toggled_lights and not automation_initiated_change }}"
-      # FIXED: Prevent bed sensor actions from being treated as manual
+        value_template: "{{ trigger.platform == 'state' and trigger.entity_id == light_switch }}"
+      - condition: template
+        value_template: "{{ not automation_initiated_change }}"
       - condition: template
         value_template: "{{ not bed_sensor_recently_triggered }}"
-      # Also check the existing logic
       - condition: template
         value_template: "{{ not bed_sensor_caused_recent_automation }}"
     then:
@@ -600,8 +603,9 @@ action:
               level: info
               message: >-
                 {{ room_name | upper }} MANUAL ACTION DETECTED:
-                user_turned_on={{ user_turned_on }}, user_turned_off={{
-                user_turned_off }}, automation_initiated={{ automation_initiated_change }},
+                user_turned_on={{ trigger.to_state.state == 'on' }}, 
+                user_turned_off={{ trigger.to_state.state == 'off' }}, 
+                automation_initiated={{ automation_initiated_change }},
                 time_since_last_automation={{ time_since_last_automation }},
                 bed_sensor_recently_triggered={{ bed_sensor_recently_triggered }}
       
@@ -628,7 +632,7 @@ action:
           # Clear override when user turns off lights in bright room while present
           - conditions:
               - condition: template
-                value_template: "{{ user_turned_off and is_bright and someone_present }}"
+                value_template: "{{ trigger.to_state.state == 'off' and is_bright and someone_present }}"
               - condition: template
                 value_template: "{{ automation_inactive }}"
             sequence:
@@ -651,7 +655,7 @@ action:
           # Set override when user turns lights back on while bed is occupied
           - conditions:
               - condition: template
-                value_template: "{{ user_turned_on and bed_occupied and enable_bed_sensor }}"
+                value_template: "{{ trigger.to_state.state == 'on' and bed_occupied and enable_bed_sensor }}"
               - condition: template
                 value_template: "{{ automation_inactive }}"
             sequence:
@@ -679,10 +683,10 @@ action:
                 conditions:
                   # User turned on when automation would turn off or preserve off state
                   - condition: template
-                    value_template: "{{ user_turned_on and (auto_would_turn_off_intent or auto_would_preserve_state_intent) }}"
+                    value_template: "{{ trigger.to_state.state == 'on' and (auto_would_turn_off_intent or auto_would_preserve_state_intent) }}"
                   # User turned off when automation would turn on or preserve on state (but not in bright room)
                   - condition: template
-                    value_template: "{{ user_turned_off and auto_would_turn_on_intent and not is_bright }}"
+                    value_template: "{{ trigger.to_state.state == 'off' and auto_would_turn_on_intent and not is_bright }}"
             sequence:
               - service: input_boolean.turn_on
                 target:
@@ -699,7 +703,7 @@ action:
                       level: info
                       message: >-
                         {{ room_name | upper }} MANUAL: Set override - user action conflicts with automation intent
-                        (user_turned_on={{ user_turned_on }}, user_turned_off={{ user_turned_off }},
+                        (user_turned_on={{ trigger.to_state.state == 'on' }}, user_turned_off={{ trigger.to_state.state == 'off' }},
                         auto_would_turn_on={{ auto_would_turn_on_intent }}, auto_would_turn_off={{ auto_would_turn_off_intent }},
                         auto_would_preserve={{ auto_would_preserve_state_intent }}, is_bright={{ is_bright }})
           
@@ -710,9 +714,9 @@ action:
               - condition: or
                 conditions:
                   - condition: template
-                    value_template: "{{ user_turned_on and auto_would_turn_on_intent }}"
+                    value_template: "{{ trigger.to_state.state == 'on' and auto_would_turn_on_intent }}"
                   - condition: template
-                    value_template: "{{ user_turned_off and auto_would_turn_off_intent }}"
+                    value_template: "{{ trigger.to_state.state == 'off' and auto_would_turn_off_intent }}"
             sequence:
               - service: input_boolean.turn_off
                 target:
