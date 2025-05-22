@@ -472,6 +472,13 @@ variables:
     {% else %}
       false
     {% endif %}
+  bed_sensor_recently_active: >-
+    {% if enable_bed_sensor and active_bed_sensor != 'none' %}
+      {% set bed_last_changed = (now() - states[active_bed_sensor].last_changed).total_seconds() %}
+      {{ bed_last_changed < 30.0 }}
+    {% else %}
+      false
+    {% endif %}
   auto_would_turn_on_intent: >-
     {{ (is_dark or is_extremely_dark) and someone_present and not bed_should_prevent_lights and not bed_delay_active }}
   auto_would_turn_off_intent: >-
@@ -540,9 +547,9 @@ action:
       - conditions:
           - condition: template
             value_template: "{{ user_toggled_lights and not automation_initiated_change }}"
-          # Don't process as manual action if this was triggered by bed sensor
+          # Don't process as manual action if bed sensor was recently active
           - condition: template
-            value_template: "{{ not bed_sensor_triggered }}"
+            value_template: "{{ not bed_sensor_recently_active }}"
         sequence:
           - if:
               - condition: template
