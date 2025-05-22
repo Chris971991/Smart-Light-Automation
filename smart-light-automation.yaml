@@ -468,14 +468,14 @@ variables:
     states(last_automation_action_helper) != '' %}
       {% set timestamp = states(last_automation_action_helper).split('+')[0] %}
       {% set time_diff = (now().replace(tzinfo=None) - strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() %}
-      {{ time_diff < 5.0 and time_diff > 0 }}
+      {{ time_diff < 10.0 and time_diff > 0 }}
     {% else %}
       false
     {% endif %}
   auto_would_turn_on_intent: >-
     {{ (is_dark or is_extremely_dark) and someone_present and not bed_should_prevent_lights and not bed_delay_active }}
   auto_would_turn_off_intent: >-
-    {{ not someone_present or (enable_bed_sensor and bed_became_occupied) }}
+    {{ not someone_present }}
   auto_would_preserve_state_intent: >-
     {{ (in_middle_range and someone_present and not bed_occupied) or 
        (is_bright and someone_present) or 
@@ -540,6 +540,9 @@ action:
       - conditions:
           - condition: template
             value_template: "{{ user_toggled_lights and not automation_initiated_change }}"
+          # Don't process manual actions if this was triggered by the bed sensor changing
+          - condition: template
+            value_template: "{{ not bed_sensor_triggered }}"
         sequence:
           - if:
               - condition: template
@@ -551,7 +554,8 @@ action:
                   message: >-
                     {{ room_name | upper }} MANUAL ACTION DETECTED:
                     user_turned_on={{ user_turned_on }}, user_turned_off={{
-                    user_turned_off }}, automation_initiated={{ automation_initiated_change }}
+                    user_turned_off }}, automation_initiated={{ automation_initiated_change }},
+                    time_since_last_automation={{ time_since_last_automation }}
           
           # Cancel any active bed delay when user manually controls lights
           - if:
@@ -657,6 +661,15 @@ action:
               - service: input_boolean.turn_off
                 target:
                   entity_id: "{{ light_auto_on_helper }}"
+              - if:
+                  - condition: template
+                    value_template: "{{ enable_debug_logs }}"
+                then:
+                  - service: system_log.write
+                    data:
+                      level: info
+                      message: >-
+                        {{ room_name | upper }} MANUAL: Set override - default manual action
 
   # Handle bed delay timeout - turn on lights after delay
   - choose:
