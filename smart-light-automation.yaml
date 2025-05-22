@@ -455,13 +455,13 @@ variables:
       false
     {% endif %}
   auto_would_turn_on_intent: >-
-    {{ (is_dark or is_extremely_dark) and someone_present and not bed_should_prevent and not bed_delay_active }}
+    {{ (is_dark or is_extremely_dark) and someone_present and not bed_should_prevent_lights and not bed_delay_active }}
   auto_would_turn_off_intent: >-
     {{ not someone_present or (enable_bed_sensor and bed_occupied) }}
   auto_would_preserve_state_intent: >-
     {{ (in_middle_range and someone_present and not bed_occupied) or 
        (is_bright and someone_present) or 
-       (bed_should_delay and not bed_delay_active) }}
+       (bed_should_delay_lights and not bed_delay_active) }}
 
 trigger:
   - entity_id:
