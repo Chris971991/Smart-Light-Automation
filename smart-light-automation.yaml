@@ -475,7 +475,21 @@ variables:
   bed_sensor_recently_active: >-
     {% if enable_bed_sensor and active_bed_sensor != 'none' %}
       {% set bed_last_changed = (now() - states[active_bed_sensor].last_changed).total_seconds() %}
-      {{ bed_last_changed < 30.0 }}
+      {{ bed_last_changed < 10.0 }}
+    {% else %}
+      false
+    {% endif %}
+  bed_sensor_caused_recent_automation: >-
+    {% if states(last_automation_action_helper) != 'unknown' and states(last_automation_action_helper) != '' %}
+      {% set timestamp = states(last_automation_action_helper).split('+')[0] %}
+      {% set automation_time_diff = (now().replace(tzinfo=None) - strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() %}
+      {% if automation_time_diff < 8.0 and enable_bed_sensor and active_bed_sensor != 'none' %}
+        {% set bed_last_changed = (now() - states[active_bed_sensor].last_changed).total_seconds() %}
+        {% set bed_automation_diff = bed_last_changed - automation_time_diff %}
+        {{ bed_automation_diff | abs < 3.0 }}
+      {% else %}
+        false
+      {% endif %}
     {% else %}
       false
     {% endif %}
@@ -547,9 +561,9 @@ action:
       - conditions:
           - condition: template
             value_template: "{{ user_toggled_lights and not automation_initiated_change }}"
-          # Don't process as manual action if bed sensor was recently active
+          # Only skip manual action detection if bed sensor directly caused recent automation
           - condition: template
-            value_template: "{{ not bed_sensor_recently_active }}"
+            value_template: "{{ not bed_sensor_caused_recent_automation }}"
         sequence:
           - if:
               - condition: template
