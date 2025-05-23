@@ -139,26 +139,28 @@ blueprint:
       description: >
         Lux threshold below which the room is considered dark enough to need lights.
         When illuminance falls below this value AND someone is present, lights will
-        turn on automatically. Typically 10-30 lux for most rooms.
-      default: 15
+        turn on automatically. Typically 20-50 lux for most rooms.
+        MUST be significantly lower than bright threshold!
+      default: 30
       selector:
         number:
-          min: 1
+          min: 5
           max: 100
           unit_of_measurement: lux
           mode: slider
-          step: 1
+          step: 5
     bright_threshold:
       name: Bright Threshold
       description: >
         Lux threshold above which the room is considered bright (has enough natural light).
         This threshold is important for the "clear override when turning off lights in bright room"
         feature. When you manually turn off lights in a bright room, the override is cleared.
-        Usually 80-150 lux is appropriate for most rooms.
-      default: 100
+        Usually 150-300 lux is appropriate for most rooms.
+        MUST be significantly higher than dark threshold!
+      default: 200
       selector:
         number:
-          min: 50
+          min: 100
           max: 500
           unit_of_measurement: lux
           mode: slider
@@ -340,9 +342,23 @@ variables:
       {{ lux | float(50) }}
     {% endif %}
   
-  # Light level conditions
-  is_dark: "{{ illuminance < dark_threshold }}"
-  is_bright: "{{ illuminance > bright_threshold }}"
+  # Validate thresholds don't overlap
+  thresholds_valid: >-
+    {{ dark_threshold < bright_threshold }}
+  
+  # Light level conditions (with validation)
+  is_dark: >-
+    {% if not thresholds_valid %}
+      {{ illuminance < 50 }}
+    {% else %}
+      {{ illuminance < dark_threshold }}
+    {% endif %}
+  is_bright: >-
+    {% if not thresholds_valid %}
+      {{ illuminance >= 100 }}
+    {% else %}
+      {{ illuminance >= bright_threshold }}
+    {% endif %}
   is_extremely_dark: "{{ illuminance < extremely_dark_threshold }}"
   in_middle_range: "{{ not is_dark and not is_bright }}"
   
@@ -681,6 +697,7 @@ action:
                 | Current override state: {{ states(manual_override_helper) }}
                 | auto_would_turn_on={{ auto_would_turn_on }}
                 | auto_would_turn_off={{ auto_would_turn_off }}
+                | illuminance={{ illuminance }} (dark<{{ dark_threshold }}, bright>={{ bright_threshold }})
                 | is_dark={{ is_dark }}
                 | is_bright={{ is_bright }}
                 | someone_present={{ someone_present }}
@@ -827,7 +844,10 @@ action:
       # Automatic light control (when no override is active)
       - conditions:
           - condition: template
-            value_template: "{{ not manual_override and not light_recently_manually_changed }}"
+            value_template: >-
+              {% set override_on = is_state(manual_override_helper, 'on') %}
+              {% set light_changed_recently = light_recently_manually_changed %}
+              {{ not override_on and not light_changed_recently }}
         sequence:
           # Double-check override state directly from helper
           - condition: template
