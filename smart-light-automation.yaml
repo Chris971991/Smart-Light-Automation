@@ -268,7 +268,7 @@ blueprint:
         Enable detailed debug logging in Home Assistant. These logs help understand
         the automation's decisions and troubleshoot issues.
         View logs in Settings → System → Logs, filtered for your room name.
-      default: true
+      default: false
       selector:
         boolean:
 
@@ -629,14 +629,18 @@ action:
     continue_on_error: true
   
   # Debug: Log current override state
-  - service: system_log.write
-    data:
-      level: warning
-      message: >-
-        [{{ room_name | upper }}] AUTOMATION START
-        | Trigger: {{ trigger.id }}
-        | Override helper state: {{ states(manual_override_helper) }}
-        | Light state: {{ states(light_switch) }}
+  - if:
+      - condition: template
+        value_template: "{{ enable_debug_logs }}"
+    then:
+      - service: system_log.write
+        data:
+          level: info
+          message: >-
+            [{{ room_name | upper }}] AUTOMATION START
+            | Trigger: {{ trigger.id }}
+            | Override helper state: {{ states(manual_override_helper) }}
+            | Light state: {{ states(light_switch) }}
   
   # Skip if we're in the middle of processing a light change
   - condition: template
@@ -688,19 +692,23 @@ action:
           - condition: template
             value_template: "{{ is_manual_change and is_light_change }}"
         sequence:
-          - service: system_log.write
-            data:
-              level: warning
-              message: >-
-                [{{ room_name | upper }}] MANUAL CHANGE PROCESSING
-                | user_turned_{{ 'on' if user_turned_on else 'off' if user_turned_off else 'unknown' }}
-                | Current override state: {{ states(manual_override_helper) }}
-                | auto_would_turn_on={{ auto_would_turn_on }}
-                | auto_would_turn_off={{ auto_would_turn_off }}
-                | illuminance={{ illuminance }} (dark<{{ dark_threshold }}, bright>={{ bright_threshold }})
-                | is_dark={{ is_dark }}
-                | is_bright={{ is_bright }}
-                | someone_present={{ someone_present }}
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    [{{ room_name | upper }}] MANUAL CHANGE PROCESSING
+                    | user_turned_{{ 'on' if user_turned_on else 'off' if user_turned_off else 'unknown' }}
+                    | Current override state: {{ states(manual_override_helper) }}
+                    | auto_would_turn_on={{ auto_would_turn_on }}
+                    | auto_would_turn_off={{ auto_would_turn_off }}
+                    | illuminance={{ illuminance }} (dark<{{ dark_threshold }}, bright>={{ bright_threshold }})
+                    | is_dark={{ is_dark }}
+                    | is_bright={{ is_bright }}
+                    | someone_present={{ someone_present }}
           
           # Process manual override logic
           - choose:
@@ -853,17 +861,21 @@ action:
           - condition: template
             value_template: "{{ is_state(manual_override_helper, 'off') }}"
           
-          - service: system_log.write
-            data:
-              level: warning
-              message: >-
-                [{{ room_name | upper }}] AUTOMATIC CONTROL ACTIVE
-                | manual_override={{ manual_override }}
-                | light_recently_manually_changed={{ light_recently_manually_changed }}
-                | override_state={{ states(manual_override_helper) }}
-                | auto_would_turn_on={{ auto_would_turn_on }}
-                | auto_would_turn_off={{ auto_would_turn_off }}
-                | lights_on={{ lights_on }}
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: >-
+                    [{{ room_name | upper }}] AUTOMATIC CONTROL ACTIVE
+                    | manual_override={{ manual_override }}
+                    | light_recently_manually_changed={{ light_recently_manually_changed }}
+                    | override_state={{ states(manual_override_helper) }}
+                    | auto_would_turn_on={{ auto_would_turn_on }}
+                    | auto_would_turn_off={{ auto_would_turn_off }}
+                    | lights_on={{ lights_on }}
           - choose:
               # Turn on lights when dark and occupied
               - conditions:
@@ -898,13 +910,17 @@ action:
                       {% set no_override = is_state(manual_override_helper, 'off') %}
                       {{ still_dark and still_present and light_still_off and no_override }}
                   
-                  - service: system_log.write
-                    data:
-                      level: warning
-                      message: >-
-                        [{{ room_name | upper }}] TURNING LIGHTS ON
-                        | Override check: {{ states(manual_override_helper) }}
-                        | Light state: {{ states(light_switch) }}
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: info
+                          message: >-
+                            [{{ room_name | upper }}] TURNING LIGHTS ON
+                            | Override check: {{ states(manual_override_helper) }}
+                            | Light state: {{ states(light_switch) }}
                   
                   # Turn on the light
                   - choose:
@@ -1029,13 +1045,17 @@ action:
       {{ not needs_light }}
 
   # Final check - ensure we're not violating manual override
-  - service: system_log.write
-    data:
-      level: warning
-      message: >-
-        [{{ room_name | upper }}] AUTOMATION END
-        | Final override state: {{ states(manual_override_helper) }}
-        | Final light state: {{ states(light_switch) }}
+  - if:
+      - condition: template
+        value_template: "{{ enable_debug_logs }}"
+    then:
+      - service: system_log.write
+        data:
+          level: info
+          message: >-
+            [{{ room_name | upper }}] AUTOMATION END
+            | Final override state: {{ states(manual_override_helper) }}
+            | Final light state: {{ states(light_switch) }}
 
 mode: queued
 max: 2
