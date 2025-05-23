@@ -635,7 +635,7 @@ action:
     then:
       - service: system_log.write
         data:
-          level: info
+          level: warning
           message: >-
             [{{ room_name | upper }}] AUTOMATION START
             | Trigger: {{ trigger.id }}
@@ -698,7 +698,7 @@ action:
             then:
               - service: system_log.write
                 data:
-                  level: info
+                  level: warning
                   message: >-
                     [{{ room_name | upper }}] MANUAL CHANGE PROCESSING
                     | user_turned_{{ 'on' if user_turned_on else 'off' if user_turned_off else 'unknown' }}
