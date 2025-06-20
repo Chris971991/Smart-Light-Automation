@@ -761,12 +761,13 @@ action:
                           level: info
                           message: "[{{ room_name | upper }}] Override cleared - turned off lights in bright room"
               
-              # User action agrees with automation intent - clear override
+              # User action agrees with automation intent - clear override (but not when in bed)
               - conditions:
                   - condition: template
                     value_template: >-
-                      {{ (user_turned_on and auto_would_turn_on) or 
-                         (user_turned_off and auto_would_turn_off) }}
+                      {{ not bed_occupied and
+                         ((user_turned_on and auto_would_turn_on) or 
+                          (user_turned_off and auto_would_turn_off)) }}
                 sequence:
                   - service: input_boolean.turn_off
                     target:
@@ -814,14 +815,20 @@ action:
           - condition: template
             value_template: "{{ not is_state(manual_override_helper, 'on') }}"
 
-      # Clear overrides on timeout or vacancy
+      # Clear overrides on timeout or vacancy (but protect bed occupancy scenarios)
       - conditions:
           - condition: template
             value_template: "{{ manual_override }}"
           - condition: or
             conditions:
-              - condition: template
-                value_template: "{{ vacant_for_timeout }}"
+              # Only clear on vacancy if bed is not occupied
+              - condition: and
+                conditions:
+                  - condition: template
+                    value_template: "{{ vacant_for_timeout }}"
+                  - condition: template
+                    value_template: "{{ not bed_occupied }}"
+              # Always clear on timeout regardless of bed
               - condition: template
                 value_template: "{{ override_timed_out }}"
         sequence:
