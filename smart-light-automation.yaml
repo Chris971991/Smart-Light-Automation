@@ -162,8 +162,8 @@ blueprint:
       default: 30
       selector:
         number:
-          min: 1
-          max: 100
+          min: 0
+          max: 499
           unit_of_measurement: lux
           mode: slider
           step: 1
@@ -173,12 +173,12 @@ blueprint:
         Lux threshold above which the room is considered bright (has enough natural light).
         This threshold is important for the "clear override when turning off lights in bright room"
         feature. When you manually turn off lights in a bright room, the override is cleared.
-        Usually 150-300 lux is appropriate for most rooms.
-        MUST be higher than dark threshold! Minimum allowed is 7 lux.
+        Usually 150-300 lux is appropriate for most rooms, but you can set any value you need.
+        MUST be higher than dark threshold!
       default: 200
       selector:
         number:
-          min: 7
+          min: 1
           max: 500
           unit_of_measurement: lux
           mode: slider
