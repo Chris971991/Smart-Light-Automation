@@ -23,6 +23,8 @@ blueprint:
     • **Smooth Transitions** - Optional fade in/out effects for compatible lights
     
     • **Human-Friendly** - Lights stay on while room is occupied, regardless of brightness
+    
+    • **Bed Occupancy Support** - Optional integration with bed sensors to prevent lights when in bed
 
     ## Compatible Sensors
 
@@ -31,6 +33,7 @@ blueprint:
     • Standard motion/PIR sensors
     • mmWave/radar presence sensors
     • Any illuminance/light level sensor
+    • Bed occupancy sensors (optional)
     • Or combinations of these sensors
     
     ## REQUIRED HELPER ENTITIES
@@ -60,6 +63,10 @@ blueprint:
     5. `input_boolean.[room_name]_occupancy_state`
        - Tracks combined occupancy state from all sensors
        - Example: input_boolean.office_occupancy_state
+    
+    6. `input_boolean.[room_name]_bed_occupied` (OPTIONAL - only for bedrooms)
+       - Tracks if bed is occupied to prevent automatic lights
+       - Example: input_boolean.master_bedroom_bed_occupied
     
     Replace [room_name] with your actual room name in LOWERCASE (e.g., office, bedroom, living_room)
     
@@ -134,6 +141,17 @@ blueprint:
       selector:
         entity:
           domain: [switch, light]
+    bed_occupied_helper:
+      name: Bed Occupied Helper (Optional)
+      description: >
+        OPTIONAL - For bedrooms only. Select the input_boolean helper that tracks bed occupancy.
+        When this helper is ON, automatic lights will not turn on (prevents lights when in bed).
+        Leave empty for non-bedroom spaces.
+        Example: input_boolean.master_bedroom_bed_occupied
+      default: ""
+      selector:
+        entity:
+          domain: input_boolean
     dark_threshold:
       name: Dark Threshold
       description: >
@@ -280,6 +298,7 @@ variables:
   presence_mmwave_sensor: !input presence_mmwave_sensor
   illuminance_sensor: !input illuminance_sensor
   light_switch: !input light_switch
+  bed_occupied_helper: !input bed_occupied_helper
   dark_threshold: !input dark_threshold
   bright_threshold: !input bright_threshold
   extremely_dark_threshold: !input extremely_dark_threshold
@@ -298,6 +317,14 @@ variables:
   light_auto_on_helper: "input_boolean.{{ room_name | lower }}_light_auto_on"
   last_automation_action_helper: "input_datetime.{{ room_name | lower }}_last_automation_action"
   occupancy_state_helper: "input_boolean.{{ room_name | lower }}_occupancy_state"
+  
+  # Check if bed is occupied (only if helper is provided)
+  bed_occupied: >-
+    {% if bed_occupied_helper is defined and bed_occupied_helper != '' and bed_occupied_helper != None %}
+      {{ is_state(bed_occupied_helper, 'on') }}
+    {% else %}
+      false
+    {% endif %}
   
   # Use mmwave sensor if provided, otherwise use PIR sensor twice
   mmwave_sensor: >-
@@ -494,8 +521,8 @@ variables:
       {% endif %}
     {% endif %}
   
-  # Automation intent
-  auto_would_turn_on: "{{ (is_dark or is_extremely_dark) and someone_present }}"
+  # Automation intent (modified to check bed occupancy)
+  auto_would_turn_on: "{{ (is_dark or is_extremely_dark) and someone_present and not bed_occupied }}"
   auto_would_turn_off: "{{ not someone_present }}"
   
   # Time-based brightness calculation
@@ -562,6 +589,11 @@ trigger:
   - platform: state
     entity_id: sun.sun
     id: sun_change
+    
+  # Bed occupancy change (only if configured)
+  - platform: state
+    entity_id: !input bed_occupied_helper
+    id: bed_change
     
   # Periodic checks
   - platform: time_pattern
@@ -641,6 +673,7 @@ action:
             | Trigger: {{ trigger.id }}
             | Override helper state: {{ states(manual_override_helper) }}
             | Light state: {{ states(light_switch) }}
+            | Bed occupied: {{ bed_occupied }}
   
   # Skip if we're in the middle of processing a light change
   - condition: template
@@ -670,6 +703,7 @@ action:
             | States: illuminance={{ illuminance }}lux (dark={{ is_dark }}, bright={{ is_bright }})
             | Presence: {{ someone_present }} (PIR={{ pir_active }}, mmWave={{ mmwave_active }})
             | Light: {{ 'ON' if lights_on else 'OFF' }}{{ ' (manual override)' if manual_override else '' }}
+            | Bed occupied: {{ bed_occupied }}
             | Vacancy timeout: {{ vacancy_timeout_minutes }}min
 
   # Update occupancy state helper
@@ -709,6 +743,7 @@ action:
                     | is_dark={{ is_dark }}
                     | is_bright={{ is_bright }}
                     | someone_present={{ someone_present }}
+                    | bed_occupied={{ bed_occupied }}
           
           # Process manual override logic
           - choose:
@@ -876,8 +911,9 @@ action:
                     | auto_would_turn_on={{ auto_would_turn_on }}
                     | auto_would_turn_off={{ auto_would_turn_off }}
                     | lights_on={{ lights_on }}
+                    | bed_occupied={{ bed_occupied }}
           - choose:
-              # Turn on lights when dark and occupied
+              # Turn on lights when dark and occupied (and NOT in bed)
               - conditions:
                   - condition: template
                     value_template: "{{ auto_would_turn_on and not lights_on }}"
@@ -908,7 +944,11 @@ action:
                       {% set still_present = pir_on or mmwave_on %}
                       {% set light_still_off = is_state(light_switch, 'off') %}
                       {% set no_override = is_state(manual_override_helper, 'off') %}
-                      {{ still_dark and still_present and light_still_off and no_override }}
+                      {% set not_in_bed = true %}
+                      {% if bed_occupied_helper is defined and bed_occupied_helper != '' %}
+                        {% set not_in_bed = is_state(bed_occupied_helper, 'off') %}
+                      {% endif %}
+                      {{ still_dark and still_present and light_still_off and no_override and not_in_bed }}
                   
                   - if:
                       - condition: template
@@ -921,6 +961,7 @@ action:
                             [{{ room_name | upper }}] TURNING LIGHTS ON
                             | Override check: {{ states(manual_override_helper) }}
                             | Light state: {{ states(light_switch) }}
+                            | Bed occupied: {{ bed_occupied }}
                   
                   # Turn on the light
                   - choose:
@@ -1033,7 +1074,7 @@ action:
                             [{{ room_name | upper }}] Automatically turned lights OFF 
                             ({{ 'vacant' if not someone_present else 'bright enough' }})
 
-  # Final failsafe - if presence detected and lights are off in dark conditions, turn them on
+  # Final failsafe - if presence detected and lights are off in dark conditions, turn them on (unless in bed)
   - condition: template
     value_template: >-
       {% set pir_on = states(presence_pir_sensor) == 'on' %}
@@ -1041,7 +1082,11 @@ action:
       {% set presence_now = pir_on or mmwave_on %}
       {% set lights_off = is_state(light_switch, 'off') %}
       {% set is_dark_now = states(illuminance_sensor) | float(50) < dark_threshold %}
-      {% set needs_light = presence_now and lights_off and is_dark_now and not manual_override %}
+      {% set in_bed = false %}
+      {% if bed_occupied_helper is defined and bed_occupied_helper != '' %}
+        {% set in_bed = is_state(bed_occupied_helper, 'on') %}
+      {% endif %}
+      {% set needs_light = presence_now and lights_off and is_dark_now and not manual_override and not in_bed %}
       {{ not needs_light }}
 
   # Final check - ensure we're not violating manual override
@@ -1056,6 +1101,7 @@ action:
             [{{ room_name | upper }}] AUTOMATION END
             | Final override state: {{ states(manual_override_helper) }}
             | Final light state: {{ states(light_switch) }}
+            | Bed occupied: {{ bed_occupied }}
 
 mode: queued
 max: 2
