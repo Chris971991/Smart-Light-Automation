@@ -226,9 +226,9 @@ blueprint:
       name: Vacancy Timeout Multiplier
       description: >
         Multiplier applied to the sensor off latency to determine true vacancy.
-        For example, with a 60s latency and 5× multiplier = 5 minute vacancy timeout.
+        For example, with a 60s latency and 10× multiplier = 10 minute vacancy timeout.
         Higher values prevent false offs but delay automatic actions.
-      default: 5
+      default: 10
       selector:
         number:
           min: 1
@@ -815,19 +815,28 @@ action:
           - condition: template
             value_template: "{{ not is_state(manual_override_helper, 'on') }}"
 
-      # Clear overrides on timeout or vacancy (but protect bed occupancy scenarios)
+      # Clear overrides on timeout or vacancy (but protect bed occupancy scenarios and recent overrides)
       - conditions:
           - condition: template
             value_template: "{{ manual_override }}"
           - condition: or
             conditions:
-              # Only clear on vacancy if bed is not occupied
+              # Only clear on vacancy if bed is not occupied AND override wasn't just set
               - condition: and
                 conditions:
                   - condition: template
                     value_template: "{{ vacant_for_timeout }}"
                   - condition: template
                     value_template: "{{ not bed_occupied }}"
+                  - condition: template
+                    value_template: >-
+                      {% set override_changed = as_timestamp(states[manual_override_helper].last_changed) %}
+                      {% if override_changed is none %}
+                        true
+                      {% else %}
+                        {% set age = now().timestamp() - override_changed %}
+                        {{ age > 300 }}
+                      {% endif %}
               # Always clear on timeout regardless of bed
               - condition: template
                 value_template: "{{ override_timed_out }}"
