@@ -590,11 +590,6 @@ trigger:
     entity_id: sun.sun
     id: sun_change
     
-  # Bed occupancy change (only if configured)
-  - platform: state
-    entity_id: !input bed_occupied_helper
-    id: bed_change
-    
   # Periodic checks
   - platform: time_pattern
     minutes: "/5"
