@@ -761,13 +761,16 @@ action:
                           level: info
                           message: "[{{ room_name | upper }}] Override cleared - turned off lights in bright room"
               
-              # User action agrees with automation intent - clear override (but not when in bed)
+              # User action agrees with automation intent - clear override (protect bed only if configured)
               - conditions:
                   - condition: template
                     value_template: >-
-                      {{ not bed_occupied and
-                         ((user_turned_on and auto_would_turn_on) or 
-                          (user_turned_off and auto_would_turn_off)) }}
+                      {% if bed_occupied_helper is defined and bed_occupied_helper != '' and bed_occupied %}
+                        false
+                      {% else %}
+                        {{ (user_turned_on and auto_would_turn_on) or 
+                           (user_turned_off and auto_would_turn_off) }}
+                      {% endif %}
                 sequence:
                   - service: input_boolean.turn_off
                     target:
@@ -815,28 +818,20 @@ action:
           - condition: template
             value_template: "{{ not is_state(manual_override_helper, 'on') }}"
 
-      # Clear overrides on timeout or vacancy (but protect bed occupancy scenarios and recent overrides)
+      # Clear overrides on timeout or vacancy (with bed protection only if bed helper is configured)
       - conditions:
           - condition: template
             value_template: "{{ manual_override }}"
           - condition: or
             conditions:
-              # Only clear on vacancy if bed is not occupied AND override wasn't just set
-              - condition: and
-                conditions:
-                  - condition: template
-                    value_template: "{{ vacant_for_timeout }}"
-                  - condition: template
-                    value_template: "{{ not bed_occupied }}"
-                  - condition: template
-                    value_template: >-
-                      {% set override_changed = as_timestamp(states[manual_override_helper].last_changed) %}
-                      {% if override_changed is none %}
-                        true
-                      {% else %}
-                        {% set age = now().timestamp() - override_changed %}
-                        {{ age > 300 }}
-                      {% endif %}
+              # Clear on vacancy (but protect if bed is occupied in bedrooms)
+              - condition: template
+                value_template: >-
+                  {% if bed_occupied_helper is defined and bed_occupied_helper != '' %}
+                    {{ vacant_for_timeout and not bed_occupied }}
+                  {% else %}
+                    {{ vacant_for_timeout }}
+                  {% endif %}
               # Always clear on timeout regardless of bed
               - condition: template
                 value_template: "{{ override_timed_out }}"
