@@ -563,11 +563,29 @@ variables:
     {% endif %}
   user_turned_on: "{{ is_light_change and trigger.to_state.state == 'on' and trigger.from_state.state == 'off' }}"
   user_turned_off: "{{ is_light_change and trigger.to_state.state == 'off' and trigger.from_state.state == 'on' }}"
+  
+  # Check if bed just became occupied (for detecting bed-triggered light offs)
+  bed_just_occupied: >-
+    {% if bed_occupied_helper is defined and bed_occupied_helper != '' %}
+      {% set bed_changed = as_timestamp(states[bed_occupied_helper].last_changed) %}
+      {% if bed_changed is not none and bed_occupied %}
+        {% set age = now().timestamp() - bed_changed %}
+        {{ age < 5 }}
+      {% else %}
+        false
+      {% endif %}
+    {% else %}
+      false
+    {% endif %}
+  
   is_manual_change: >-
     {% if not is_light_change %}
       false
     {% else %}
       {% if automation_active %}
+        false
+      {% elif user_turned_off and turn_off_when_bed_occupied and bed_just_occupied %}
+        {# Light turned off right after bed occupied = automation did it #}
         false
       {% else %}
         {% set last_action = states(last_automation_action_helper) %}
@@ -944,6 +962,17 @@ action:
                           level: info
                           message: "[{{ room_name | upper }}] Override cleared - user action matches automation intent"
               
+              # Log when bed auto-off is detected (no override set)
+              - conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ user_turned_off and turn_off_when_bed_occupied and bed_occupied and enable_debug_logs }}
+                sequence:
+                  - service: system_log.write
+                    data:
+                      level: info
+                      message: "[{{ room_name | upper }}] Bed auto-off detected - NOT setting manual override"
+              
               # Smart manual override detection (with bed awareness)
               - conditions:
                   - condition: template
@@ -958,29 +987,48 @@ action:
                         {% endif %}
                       {% endif %}
                       
+                      {# Check if this is bed-triggered auto-off #}
+                      {% set bed_auto_off = false %}
+                      {% if user_turned_off and turn_off_when_bed_occupied and bed_occupied %}
+                        {# If lights just turned off and bed is occupied, this was likely automatic #}
+                        {% set bed_auto_off = true %}
+                      {% endif %}
+                      
                       {% set threshold_gap = bright_threshold - dark_threshold %}
                       {% set very_narrow_range = threshold_gap <= 10 %}
                       {% set somewhat_dark = illuminance < (dark_threshold * 1.5) %}
                       {% set near_dark_threshold = (illuminance - dark_threshold)|abs < 2 %}
                       {% set buffer_zone = illuminance < (dark_threshold + (threshold_gap * 0.3)) %}
                       
-                      {# Classic conflicts - always override #}
-                      {% set classic_conflict = (user_turned_on and not auto_would_turn_on) or 
-                                                (user_turned_off and auto_would_turn_on) %}
+                      {# Classic conflicts - always override UNLESS it's bed auto-off #}
+                      {% set classic_conflict = false %}
+                      {% if not bed_auto_off %}
+                        {% set classic_conflict = (user_turned_on and not auto_would_turn_on) or 
+                                                  (user_turned_off and auto_would_turn_on) %}
+                      {% endif %}
                       
-                      {# Smart detection for edge cases #}
-                      {% set edge_case_off = user_turned_off and someone_present and 
-                                              (somewhat_dark or buffer_zone or near_dark_threshold) %}
+                      {# Smart detection for edge cases - skip if bed auto-off #}
+                      {% set edge_case_off = false %}
+                      {% if not bed_auto_off %}
+                        {% set edge_case_off = user_turned_off and someone_present and 
+                                                (somewhat_dark or buffer_zone or near_dark_threshold) %}
+                      {% endif %}
                       
                       {# In narrow ranges, any manual action in middle should override #}
                       {% set narrow_range_override = very_narrow_range and in_middle_range and 
-                                                      (user_turned_on or user_turned_off) %}
+                                                      (user_turned_on or (user_turned_off and not bed_auto_off)) %}
                       
                       {# User fighting automation - if light was auto-on and user turns it off #}
-                      {% set fighting_automation = user_turned_off and light_was_auto_on and someone_present %}
+                      {% set fighting_automation = false %}
+                      {% if not bed_auto_off %}
+                        {% set fighting_automation = user_turned_off and light_was_auto_on and someone_present %}
+                      {% endif %}
                       
                       {# Turn off in extremely dark conditions = definitely wants override #}
-                      {% set extreme_override = user_turned_off and is_extremely_dark and someone_present %}
+                      {% set extreme_override = false %}
+                      {% if not bed_auto_off %}
+                        {% set extreme_override = user_turned_off and is_extremely_dark and someone_present %}
+                      {% endif %}
                       
                       {# Bed-specific overrides #}
                       {% set bed_override = false %}
@@ -989,8 +1037,8 @@ action:
                         {% set bed_override = user_turned_on %}
                       {% endif %}
                       
-                      {# Only set override if NOT a recent automatic turn-on #}
-                      {{ not auto_on_recent and (classic_conflict or edge_case_off or narrow_range_override or 
+                      {# Only set override if NOT a recent automatic turn-on AND NOT bed auto-off #}
+                      {{ not auto_on_recent and not bed_auto_off and (classic_conflict or edge_case_off or narrow_range_override or 
                         fighting_automation or extreme_override or bed_override) }}
                 sequence:
                   - service: input_boolean.turn_on
