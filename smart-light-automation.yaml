@@ -14,7 +14,7 @@ blueprint:
     
     • **Smart Overrides** - Respects when you manually control lights
     
-    • **Bright Room Logic** - Clears overrides when you turn off lights in well-lit rooms
+    • **Bright Room Logic** - Clears overrides when turning off lights in well-lit rooms
     
     • **Timeout Protection** - Clears overrides after configurable timeout
     
@@ -27,6 +27,8 @@ blueprint:
     • **Human-Friendly** - Lights stay on while room is occupied, regardless of brightness
     
     • **Bed Occupancy Support** - Optional integration with bed sensors to prevent lights when in bed
+    
+    • **Bedtime Auto-Off** - Optional: Automatically turn lights off when getting into bed
 
     ## Compatible Sensors
 
@@ -154,6 +156,15 @@ blueprint:
       selector:
         entity:
           domain: input_boolean
+    turn_off_when_bed_occupied:
+      name: Turn Off Lights When Getting Into Bed
+      description: >
+        When enabled, lights will automatically turn OFF when the bed sensor detects occupancy.
+        This is perfect for bedtime - the lights turn off as soon as you get into bed.
+        When disabled, bed occupancy only prevents lights from turning ON automatically.
+      default: true
+      selector:
+        boolean:
     dark_threshold:
       name: Dark Threshold
       description: >
@@ -336,6 +347,7 @@ variables:
   illuminance_sensor: !input illuminance_sensor
   light_switch: !input light_switch
   bed_occupied_helper: !input bed_occupied_helper
+  turn_off_when_bed_occupied: !input turn_off_when_bed_occupied
   dark_threshold: !input dark_threshold
   bright_threshold: !input bright_threshold
   extremely_dark_threshold: !input extremely_dark_threshold
@@ -536,6 +548,12 @@ variables:
   
   # Trigger detection
   is_light_change: "{{ trigger.platform == 'state' and trigger.entity_id == light_switch }}"
+  is_bed_trigger: >-
+    {% if bed_occupied_helper is defined and bed_occupied_helper != '' %}
+      {{ trigger.platform == 'state' and trigger.entity_id == bed_occupied_helper }}
+    {% else %}
+      false
+    {% endif %}
   user_turned_on: "{{ is_light_change and trigger.to_state.state == 'on' and trigger.from_state.state == 'off' }}"
   user_turned_off: "{{ is_light_change and trigger.to_state.state == 'off' and trigger.from_state.state == 'on' }}"
   is_manual_change: >-
@@ -561,9 +579,16 @@ variables:
       {% endif %}
     {% endif %}
   
-  # Automation intent (modified to check bed occupancy)
+  # Automation intent (modified to check bed occupancy and new feature)
   auto_would_turn_on: "{{ (is_dark or is_extremely_dark) and someone_present and not bed_occupied }}"
-  auto_would_turn_off: "{{ not someone_present }}"
+  auto_would_turn_off: >-
+    {% if not someone_present %}
+      true
+    {% elif turn_off_when_bed_occupied and bed_occupied and lights_on %}
+      true
+    {% else %}
+      false
+    {% endif %}
   
   # Time-based brightness calculation
   adaptive_brightness: >-
@@ -659,6 +684,12 @@ trigger:
   - platform: state
     entity_id: sun.sun
     id: sun_change
+  
+  # Bed occupancy trigger (if configured)
+  - platform: state
+    entity_id: !input bed_occupied_helper
+    id: bed_change
+    to: 'on'
     
   # Periodic checks
   - platform: time_pattern
@@ -739,6 +770,7 @@ action:
             | Override helper state: {{ states(manual_override_helper) }}
             | Light state: {{ states(light_switch) }}
             | Bed occupied: {{ bed_occupied }}
+            | Turn off when bed occupied: {{ turn_off_when_bed_occupied }}
             | Override behavior: {{ override_behavior }}
   
   # Skip if we're in the middle of processing a light change (REDUCED from 2 to 0.5 seconds)
@@ -968,7 +1000,7 @@ action:
                           level: info
                           message: >-
                             [{{ room_name | upper }}] Manual override set - Smart detection
-                            | Reason: {% if (user_turned_on and not auto_would_turn_on) or (user_turned_off and auto_would_turn_on) %}Classic conflict{% elif user_turned_off and someone_present and illuminance < (dark_threshold * 1.5) %}User wants lights off near dark threshold{% elif (bright_threshold - dark_threshold) <= 10 and in_middle_range %}Narrow threshold range manual control{% elif user_turned_off and light_was_auto_on and someone_present %}User overriding automatic action{% elif user_turned_off and is_extremely_dark and someone_present %}Manual off in extreme darkness{% elif bed_occupied_helper is defined and bed_occupied_helper != '' and bed_occupied and user_turned_on %}Manual on while in bed{% else %}Edge case detected{% endif %}
+                            | Reason: {% if (user_turned_on and not auto_would_turn_on) or (user_turned_off and auto_would_turn_off) %}Classic conflict{% elif user_turned_off and someone_present and illuminance < (dark_threshold * 1.5) %}User wants lights off near dark threshold{% elif (bright_threshold - dark_threshold) <= 10 and in_middle_range %}Narrow threshold range manual control{% elif user_turned_off and light_was_auto_on and someone_present %}User overriding automatic action{% elif user_turned_off and is_extremely_dark and someone_present %}Manual off in extreme darkness{% elif bed_occupied_helper is defined and bed_occupied_helper != '' and bed_occupied and user_turned_on %}Manual on while in bed{% else %}Edge case detected{% endif %}
                             | Illuminance: {{ illuminance }} lux
                             | Thresholds: {{ dark_threshold }}-{{ bright_threshold }} lux
                             | Bed occupied: {{ bed_occupied }}
@@ -1010,6 +1042,7 @@ action:
                     | auto_would_turn_off={{ auto_would_turn_off }}
                     | lights_on={{ lights_on }}
                     | bed_occupied={{ bed_occupied }}
+                    | turn_off_when_bed_occupied={{ turn_off_when_bed_occupied }}
           - choose:
               # Turn on lights when dark and occupied (and NOT in bed)
               - conditions:
@@ -1100,7 +1133,7 @@ action:
                             [{{ room_name | upper }}] Automatically turned lights ON 
                             (brightness: {{ adaptive_brightness }}%)
 
-              # Turn off lights when vacant
+              # Turn off lights when vacant OR when getting into bed (if enabled)
               - conditions:
                   - condition: template
                     value_template: "{{ auto_would_turn_off and lights_on }}"
@@ -1123,7 +1156,11 @@ action:
                       {% set pir_on = states(presence_pir_sensor) == 'on' %}
                       {% set mmwave_on = states(mmwave_sensor) == 'on' %}
                       {% set still_vacant = not (pir_on or mmwave_on) %}
-                      {{ still_vacant }}
+                      {% set bed_trigger_off = false %}
+                      {% if turn_off_when_bed_occupied and bed_occupied_helper is defined and bed_occupied_helper != '' %}
+                        {% set bed_trigger_off = is_state(bed_occupied_helper, 'on') %}
+                      {% endif %}
+                      {{ still_vacant or bed_trigger_off }}
                   
                   # Turn off the light
                   - choose:
@@ -1160,7 +1197,9 @@ action:
                       - service: system_log.write
                         data:
                           level: info
-                          message: "[{{ room_name | upper }}] Automatically turned lights OFF (vacant)"
+                          message: >-
+                            [{{ room_name | upper }}] Automatically turned lights OFF 
+                            {% if turn_off_when_bed_occupied and bed_occupied %}(bed occupied){% else %}(vacant){% endif %}
 
   # Final failsafe - if presence detected and lights are off in dark conditions, turn them on (unless in bed)
   - condition: template
