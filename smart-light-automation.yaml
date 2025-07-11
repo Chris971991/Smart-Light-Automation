@@ -68,9 +68,10 @@ blueprint:
        - Tracks combined occupancy state from all sensors
        - Example: input_boolean.office_occupancy_state
     
-    6. `input_boolean.[room_name]_bed_occupied` (OPTIONAL - only for bedrooms)
-       - Tracks if bed is occupied to prevent automatic lights
-       - Example: input_boolean.master_bedroom_bed_occupied
+    6. Bed sensor (OPTIONAL - only for bedrooms)
+       - Use your actual bed sensor directly - no helper needed!
+       - Example: binary_sensor.bed_presence_sensor_master_bedroom
+       - Or if you prefer, you can still use a helper: input_boolean.master_bedroom_bed_occupied
     
     Replace [room_name] with your actual room name in LOWERCASE (e.g., office, bedroom, living_room)
     
@@ -146,16 +147,22 @@ blueprint:
         entity:
           domain: [switch, light]
     bed_occupied_helper:
-      name: Bed Occupied Helper (Optional)
+      name: Bed Sensor (Optional)
       description: >
-        OPTIONAL - For bedrooms only. Select the input_boolean helper that tracks bed occupancy.
-        When this helper is ON, automatic lights will not turn on (prevents lights when in bed).
+        OPTIONAL - For bedrooms only. Select your bed occupancy sensor.
+        This can be either a binary_sensor (like a bed presence sensor) or an input_boolean helper.
+        When this sensor is ON, automatic lights will not turn on (prevents lights when in bed).
+        With "Turn Off When Getting Into Bed" enabled, lights will also turn off when sensor turns ON.
         Leave empty for non-bedroom spaces.
-        Example: input_boolean.master_bedroom_bed_occupied
+        Examples: 
+        - binary_sensor.bed_presence_sensor_master_bedroom
+        - input_boolean.master_bedroom_bed_occupied
       default: ""
       selector:
         entity:
-          domain: input_boolean
+          domain: 
+            - binary_sensor
+            - input_boolean
     turn_off_when_bed_occupied:
       name: Turn Off Lights When Getting Into Bed
       description: >
