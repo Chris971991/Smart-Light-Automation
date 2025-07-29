@@ -1255,6 +1255,143 @@ action:
           
           - choose:
               # Turn lights ON
+              - conditions:
+                  - condition: template
+                    value_template: "{{ auto_would_turn_on and not lights_on }}"
+                sequence:
+                  # Set automation active
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: "{{ automation_active_helper }}"
+                  
+                  # Record action time
+                  - service: input_datetime.set_datetime
+                    target:
+                      entity_id: "{{ last_automation_action_helper }}"
+                    data:
+                      datetime: "{{ now() }}"
+                  
+                  # Final safety check
+                  - condition: template
+                    value_template: >-
+                      {{ is_dark and someone_present and not bed_occupied and 
+                         is_state(light_switch, 'off') and 
+                         is_state(manual_override_helper, 'off') }}
+                  
+                  # Turn on light with all features
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ light_is_dimmable }}"
+                        sequence:
+                          - service: light.turn_on
+                            target:
+                              entity_id: "{{ light_switch }}"
+                            data: >-
+                              {% set data = {'brightness_pct': adaptive_brightness} %}
+                              {% if enable_color_temperature and light_supports_color_temp and adaptive_color_temp > 0 %}
+                                {% set data = dict(data, **{'kelvin': adaptive_color_temp}) %}
+                              {% endif %}
+                              {% if enable_transition_effects %}
+                                {% set data = dict(data, **{'transition': transition_time_seconds}) %}
+                              {% endif %}
+                              {{ data }}
+                    default:
+                      - service: homeassistant.turn_on
+                        target:
+                          entity_id: "{{ light_switch }}"
+                  
+                  # Set auto-on flag
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: "{{ light_auto_on_helper }}"
+                  
+                  # Clear automation active
+                  - delay:
+                      seconds: "{{ transition_time_seconds if enable_transition_effects else 0.1 }}"
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ automation_active_helper }}"
+                  
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: warning
+                          message: >-
+                            ┌─ {{ room_name | upper }} LIGHTS TURNED ON ──────────────────
+                            │ Brightness: {{ adaptive_brightness }}%
+                            │ Color Temp: {{ adaptive_color_temp }}K{{ ' (enabled)' if (enable_color_temperature and light_supports_color_temp) else ' (disabled)' }}
+                            │ Transition: {{ transition_time_seconds if enable_transition_effects else 'instant' }}s
+                            │ Guest Mode: {{ 'YES' if enable_guest_mode else 'NO' }}
+                            └─────────────────────────────────────────────────────
+              
+              # Turn lights OFF
+              - conditions:
+                  - condition: template
+                    value_template: "{{ auto_would_turn_off and lights_on }}"
+                sequence:
+                  # Set automation active
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: "{{ automation_active_helper }}"
+                  
+                  # Record action time
+                  - service: input_datetime.set_datetime
+                    target:
+                      entity_id: "{{ last_automation_action_helper }}"
+                    data:
+                      datetime: "{{ now() }}"
+                  
+                  # Final safety check
+                  - condition: template
+                    value_template: >-
+                      {% set vacant_trigger = not someone_present %}
+                      {% set bed_trigger = turn_off_when_bed_occupied and bed_occupied and not (enable_guest_mode and guest_ignore_bed) %}
+                      {{ (vacant_trigger or bed_trigger) and is_state(light_switch, 'on') }}
+                  
+                  # Turn off light
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ light_is_dimmable and enable_transition_effects }}"
+                        sequence:
+                          - service: light.turn_off
+                            target:
+                              entity_id: "{{ light_switch }}"
+                            data:
+                              transition: "{{ transition_time_seconds }}"
+                    default:
+                      - service: homeassistant.turn_off
+                        target:
+                          entity_id: "{{ light_switch }}"
+                  
+                  # Clear auto-on flag
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ light_auto_on_helper }}"
+                  
+                  # Clear automation active
+                  - delay:
+                      seconds: "{{ transition_time_seconds if enable_transition_effects else 0.1 }}"
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ automation_active_helper }}"
+                  
+                  - if:
+                      - condition: template
+                        value_template: "{{ enable_debug_logs }}"
+                    then:
+                      - service: system_log.write
+                        data:
+                          level: warning
+                          message: >-
+                            ┌─ {{ room_name | upper }} LIGHTS TURNED OFF ─────────────────
+                            │ Reason: {% if turn_off_when_bed_occupied and bed_occupied and not (enable_guest_mode and guest_ignore_bed) %}Bed occupied{% else %}Room vacant{% endif %} ({{ vacancy_timeout_minutes }}min timeout{{ ', guest mode' if enable_guest_mode else '' }})
+                            │ Transition: {{ transition_time_seconds if enable_transition_effects else 'instant' }}s
+                            └─────────────────────────────────────────────────────
   
   # Enhanced decision summary
   - if:
