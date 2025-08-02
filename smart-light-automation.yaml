@@ -1,7 +1,7 @@
 blueprint:
-  name: Smart Presence Lighting Control (With Bed) - Enhanced v2
+  name: Smart Presence Lighting Control (With Bed) - Enhanced v2.1
   description: >
-    # Smart Presence Lighting Control - Enhanced Version 2
+    # Smart Presence Lighting Control - Enhanced Version 2.1
 
     Intelligently manages your lighting based on room occupancy, light levels, and manual controls.
     Works with any combination of motion sensors, occupancy sensors, and illuminance sensors.
@@ -455,7 +455,7 @@ blueprint:
       selector:
         boolean:
 
-# Variables and state management - ENHANCED v2
+# Variables and state management - ENHANCED v2.1
 variables:
   # Store start time for performance monitoring
   start_time: "{{ now().timestamp() }}"
@@ -636,20 +636,31 @@ variables:
   bed_occupied_seconds_ago: "{{ (current_time - bed_changed_time) | round(1) }}"
   time_since_last_automation: "{{ (current_time - last_automation_time) | round(1) }}"
   
+  # Check if automation_active is stale (stuck on)
+  automation_active_stale: >-
+    {% if automation_active %}
+      {% set active_time = as_timestamp(states[automation_active_helper].last_changed) %}
+      {% if active_time %}
+        {{ (current_time - active_time) > 3 }}
+      {% else %}
+        true
+      {% endif %}
+    {% else %}
+      false
+    {% endif %}
+  
   # Recent change detection
   light_recently_changed: "{{ light_changed_seconds_ago < 2 }}"
   bed_recently_occupied: "{{ bed_occupied and bed_occupied_seconds_ago < 3 }}"
   override_recently_set: "{{ manual_override and (current_time - override_changed_time) < 5 }}"
   
-  # Manual change detection
+  # Enhanced manual change detection
   is_manual_change: >-
     {% if trigger.platform != 'state' or trigger.entity_id != light_switch %}
       false
-    {% elif automation_active %}
-      false
-    {% elif time_since_last_automation < 1.5 %}
-      false
     {% elif turn_off_when_bed_occupied and bed_recently_occupied and trigger.to_state.state == 'off' %}
+      false
+    {% elif automation_active and not automation_active_stale and time_since_last_automation < 1 %}
       false
     {% else %}
       true
@@ -865,6 +876,24 @@ action:
   - variables:
       action_start_time: "{{ now().timestamp() }}"
   
+  # Clear stale automation_active flag FIRST
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ automation_active_stale }}"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ automation_active_helper }}"
+          - if:
+              - condition: template
+                value_template: "{{ enable_debug_logs }}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "[{{ room_name | upper }}] Cleared stale automation_active flag"
+  
   # Validate helper entities exist
   - choose:
       - conditions:
@@ -949,6 +978,7 @@ action:
             │ Presence: {{ 'YES' if someone_present else 'NO' }} (PIR={{ pir_active }}, mmWave={{ mmwave_active }})
             │ Illuminance: {{ illuminance }}lux (raw={{ illuminance_raw }}lux, dark<{{ dark_threshold }}, bright≥{{ bright_threshold }})
             │ Override: {{ 'ACTIVE' if manual_override else 'INACTIVE' }} ({{ override_active_minutes }}min)
+            │ Automation Active: {{ 'YES' if automation_active else 'NO' }}{{ ' (STALE)' if automation_active_stale else '' }}
             │ Bed: {{ 'OCCUPIED' if bed_occupied_raw else 'EMPTY' }}{{ ' (ignored-guest mode)' if (enable_guest_mode and guest_ignore_bed and bed_occupied_raw) else '' }}
             │ Vacancy: {{ room_vacant_minutes }}min
             │ Guest Mode: {{ 'ENABLED' if enable_guest_mode else 'DISABLED' }}
@@ -957,7 +987,7 @@ action:
   # Skip if automation is already active (prevent race conditions)
   - condition: template
     value_template: >-
-      {% if trigger.id != 'light_change' and automation_active %}
+      {% if trigger.id != 'light_change' and automation_active and not automation_active_stale %}
         {% set active_time = as_timestamp(states[automation_active_helper].last_changed) %}
         {% if active_time %}
           {{ (current_time - active_time) > 0.5 }}
@@ -1003,6 +1033,7 @@ action:
             │ trigger.entity_id: {{ trigger.entity_id }}
             │ light_switch: {{ light_switch }}
             │ automation_active: {{ automation_active }}
+            │ automation_active_stale: {{ automation_active_stale }}
             │ time_since_last_automation: {{ time_since_last_automation }}
 
   # Override clearing logic
@@ -1306,9 +1337,9 @@ action:
                     target:
                       entity_id: "{{ light_auto_on_helper }}"
                   
-                  # Clear automation active
+                  # Clear automation active with improved delay
                   - delay:
-                      seconds: "{{ transition_time_seconds if enable_transition_effects else 0.1 }}"
+                      seconds: "{{ [transition_time_seconds if enable_transition_effects else 0.5, 0.5] | max }}"
                   - service: input_boolean.turn_off
                     target:
                       entity_id: "{{ automation_active_helper }}"
@@ -1373,9 +1404,9 @@ action:
                     target:
                       entity_id: "{{ light_auto_on_helper }}"
                   
-                  # Clear automation active
+                  # Clear automation active with improved delay
                   - delay:
-                      seconds: "{{ transition_time_seconds if enable_transition_effects else 0.1 }}"
+                      seconds: "{{ [transition_time_seconds if enable_transition_effects else 0.5, 0.5] | max }}"
                   - service: input_boolean.turn_off
                     target:
                       entity_id: "{{ automation_active_helper }}"
