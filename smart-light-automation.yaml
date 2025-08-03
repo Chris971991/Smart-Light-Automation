@@ -8,7 +8,7 @@ blueprint:
     
     ## NEW IN v3.2: Smart Switch as Controller
     
-    • **Fixed Smart Switch Behavior** - Switch acts as controller, not power cutoff
+    • **Fixed Smart Switch Behavior** - Switch acts as controller, not power cutoff. **Note** - For this to work, you need to have your smart lights wired to constant power! This can be done by wiring the lights behind your switch to the constant power supply from your house and not wiring it into the light switch itself.
     
     • **Physical Press = Command** - Switch presses send commands to lights
     
