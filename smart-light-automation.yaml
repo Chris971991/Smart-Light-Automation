@@ -1,10 +1,16 @@
 blueprint:
-  name: Smart Presence Lighting Control (With Bed) - Enhanced v3.1
+  name: Smart Presence Lighting Control (With Bed) - Enhanced v3.2
   description: >
-    # Smart Presence Lighting Control - Enhanced Version 3.1
+    # Smart Presence Lighting Control - Enhanced Version 3.2
 
     Intelligently manages your lighting based on room occupancy, light levels, and manual controls.
     Works with any combination of motion sensors, occupancy sensors, and illuminance sensors.
+    
+    ## NEW IN v3.2: Smart Switch as Controller
+    
+    • **Fixed Smart Switch Behavior** - Switch acts as controller, not power cutoff
+    
+    • **Physical Press = Command** - Switch presses send commands to lights
     
     ## NEW IN v3.1: Advanced Dimming Control
     
@@ -16,7 +22,7 @@ blueprint:
     
     ## NEW IN v3.0: Flexible Light/Switch Control
     
-    • **Smart Switch + Smart Lights** - Keep switch on, control lights directly with full features
+    • **Smart Switch + Smart Lights** - Switch acts as controller, sending commands to lights
     
     • **Smart Lights Only** - Direct light control without a switch
     
@@ -171,9 +177,9 @@ blueprint:
     light_switch:
       name: Light Switch/Entity (Optional - see Light Entities below)
       description: >
-        **OPTIONAL** - The switch that controls power to your lights.
+        **OPTIONAL** - The switch that controls your lights.
         
-        • **For smart switch + smart lights**: Select your wall switch here. It will be kept ON to provide power to smart lights.
+        • **For smart switch + smart lights**: Select your wall switch here. The switch acts as a controller - physical presses send commands to control the smart lights (doesn't cut power).
         
         • **For smart lights only**: Leave this empty and use the Light Entities field below.
         
@@ -191,7 +197,7 @@ blueprint:
         
         • **For smart lights**: Select one or more light entities to control directly.
         
-        • **For smart switch + smart lights**: Select your smart lights here. The switch will stay ON.
+        • **For smart switch + smart lights**: Select your smart lights here. The switch acts as a controller for these lights.
         
         • **For smart switch only**: Leave this empty.
         
@@ -206,7 +212,7 @@ blueprint:
       description: >
         Select how your lighting is set up:
         
-        **Smart Switch + Smart Lights** - You have a wall switch AND smart bulbs. The switch will be kept ON and the bulbs controlled directly.
+        **Smart Switch + Smart Lights** - You have a wall switch AND smart bulbs. The switch acts as a controller - pressing it sends commands to toggle the smart lights (doesn't cut power).
         
         **Smart Lights Only** - You only have smart bulbs with no separate switch (e.g., lamps, integrated fixtures).
         
@@ -537,7 +543,7 @@ blueprint:
       selector:
         boolean:
 
-# Variables and state management - ENHANCED v3.1
+# Variables and state management - ENHANCED v3.2
 variables:
   # Store start time for performance monitoring
   start_time: "{{ now().timestamp() }}"
@@ -1226,26 +1232,7 @@ action:
         true
       {% endif %}
   
-  # Ensure switch is ON for switch_and_lights mode
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: >-
-              {{ control_mode == 'switch_and_lights' and has_switch and not is_state(light_switch, 'on') }}
-        sequence:
-          - service: homeassistant.turn_on
-            target:
-              entity_id: "{{ light_switch }}"
-          - if:
-              - condition: template
-                value_template: "{{ enable_debug_logs }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: "[{{ room_name | upper }}] Turned ON switch to provide power to smart lights"
-          - delay:
-              milliseconds: 500
+
   
   # Update occupancy state helper if changed
   - choose:
@@ -1565,19 +1552,6 @@ action:
                           - condition: template
                             value_template: "{{ control_mode != 'switch_only' and has_lights }}"
                         sequence:
-                          # Ensure switch is on for switch+lights mode
-                          - choose:
-                              - conditions:
-                                  - condition: template
-                                    value_template: >-
-                                      {{ control_mode == 'switch_and_lights' and has_switch and not is_state(light_switch, 'on') }}
-                                sequence:
-                                  - service: homeassistant.turn_on
-                                    target:
-                                      entity_id: "{{ light_switch }}"
-                                  - delay:
-                                      milliseconds: 200
-                          
                           # Turn on smart lights with features
                           - service: light.turn_on
                             target:
@@ -1679,7 +1653,7 @@ action:
                   
                   # Turn off lights based on control mode
                   - choose:
-                      # Smart lights only or switch+lights mode - turn off lights, keep switch on
+                      # Smart lights only or switch+lights mode - turn off lights directly
                       - conditions:
                           - condition: template
                             value_template: "{{ control_mode != 'switch_only' and has_lights }}"
