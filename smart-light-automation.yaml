@@ -1748,8 +1748,8 @@ action:
                           level: info
                           message: >-
                             [{{ room_name | upper }}] Manual override SET
-                            │ Reason: {% if wants_dark_while_present %}Wants dark while present (not bright){% elif wants_light_when_not_dark %}Wants light when not dark{% elif fighting_automation %}Fighting automation{% elif extreme_override %}Extreme darkness override{% elif middle_range_override %}Manual control in narrow threshold range{% elif bed_override %}Manual ON while in bed{% else %}User preference{% endif %}
-                            │ Gap: {{ threshold_gap }} lux, Illuminance: {{ illuminance }} lux
+                            │ Reason: {% if user_turned_off and someone_present and not is_bright and not (turn_off_when_bed_occupied and bed_occupied and not (enable_guest_mode and guest_ignore_bed)) %}Wants dark while present (not bright){% elif user_turned_on and not is_dark and someone_present %}Wants light when not dark{% elif user_turned_off and light_was_auto_on and someone_present and not (turn_off_when_bed_occupied and bed_occupied and not (enable_guest_mode and guest_ignore_bed)) %}Fighting automation{% elif user_turned_off and is_extremely_dark and someone_present and not (turn_off_when_bed_occupied and bed_occupied and not (enable_guest_mode and guest_ignore_bed)) %}Extreme darkness override{% elif (bright_threshold - dark_threshold) <= 10 and in_middle_range and someone_present and not (turn_off_when_bed_occupied and bed_occupied and not (enable_guest_mode and guest_ignore_bed)) %}Manual control in narrow threshold range{% elif bed_occupied_helper and bed_occupied and not (enable_guest_mode and guest_ignore_bed) and user_turned_on %}Manual ON while in bed{% else %}User preference{% endif %}
+                            │ Gap: {{ bright_threshold - dark_threshold }} lux, Illuminance: {{ illuminance }} lux
           
           # Clear auto-on flag
           - service: input_boolean.turn_off
